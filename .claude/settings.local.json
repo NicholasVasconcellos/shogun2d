@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/nicholas/Developer/shogun2d/**)",
+      "Bash(done)",
+      "Bash('base=Autumn Forest 2D Pixel Art/Autumn Forest 2D Pixel Art/Autumn Forest 2D Pixel Art')",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Bash(sips -g pixelWidth -g pixelHeight $f)",
+      "Bash(npx tsc:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/assets/samurai/idle.png)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/assets/forest/tileset/Tileset.png)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/assets/forest/background/1.png)",
+      "Bash(git init:*)"
+    ]
+  }
+}

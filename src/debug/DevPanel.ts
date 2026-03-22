@@ -64,8 +64,25 @@ export class DevPanel {
       padding: '2px 6px',
     });
 
+    const docsLink = document.createElement('a');
+    docsLink.textContent = '[ DOCS ]';
+    docsLink.href = '/docs.html';
+    docsLink.target = '_blank';
+    Object.assign(docsLink.style, {
+      color: '#7fdbca',
+      textDecoration: 'none',
+      fontSize: '11px',
+      border: '1px solid #555',
+      padding: '2px 6px',
+      cursor: 'pointer',
+    });
+
     header.appendChild(title);
-    header.appendChild(toggleBtn);
+    const headerBtns = document.createElement('div');
+    Object.assign(headerBtns.style, { display: 'flex', gap: '4px' });
+    headerBtns.appendChild(docsLink);
+    headerBtns.appendChild(toggleBtn);
+    header.appendChild(headerBtns);
     this.container.appendChild(header);
 
     // Runtime info

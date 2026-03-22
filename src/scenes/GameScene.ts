@@ -49,7 +49,7 @@ export class GameScene extends Phaser.Scene {
 
     // Respawn if fallen
     this.input.keyboard?.addKey('R').on('down', () => {
-      this.player.sprite.setPosition(spawnX, spawnY);
+      this.player.sprite.setPosition(this.player.config.spawnX, this.player.config.spawnY);
       (this.player.sprite.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
     });
   }
@@ -59,7 +59,7 @@ export class GameScene extends Phaser.Scene {
 
     // Respawn on fall
     if (this.player.sprite.y > this.level.WORLD_HEIGHT + 100) {
-      this.player.sprite.setPosition(160, this.level.WORLD_HEIGHT - this.level.TILE * 4);
+      this.player.sprite.setPosition(this.player.config.spawnX, this.player.config.spawnY);
       (this.player.sprite.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
     }
 

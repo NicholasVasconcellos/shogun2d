@@ -42,6 +42,10 @@ export interface MovementConfig {
 
   // Physics scale
   gravityScale: number;
+
+  // Spawn
+  spawnX: number;
+  spawnY: number;
 }
 
 const DEFAULT_CONFIG: MovementConfig = {
@@ -69,6 +73,9 @@ const DEFAULT_CONFIG: MovementConfig = {
   dashCooldown: 600,
 
   gravityScale: 1.0,
+
+  spawnX: 160,
+  spawnY: 0, // overridden at construction
 };
 
 export class PlayerController {
@@ -114,7 +121,7 @@ export class PlayerController {
 
   constructor(scene: Phaser.Scene, x: number, y: number, config?: Partial<MovementConfig>) {
     this.scene = scene;
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = { ...DEFAULT_CONFIG, spawnX: x, spawnY: y, ...config };
 
     this.sprite = scene.physics.add.sprite(x, y, 'samurai-idle');
     this.sprite.setScale(2);
@@ -227,6 +234,9 @@ export class PlayerController {
       { key: 'dashCooldown', label: 'Dash Cooldown (ms)', value: this.config.dashCooldown, min: 100, max: 2000, step: 50, category: 'Dash' },
 
       { key: 'gravityScale', label: 'Gravity Scale', value: this.config.gravityScale, min: 0.1, max: 3, step: 0.1, category: 'Physics' },
+
+      { key: 'spawnX', label: 'Spawn X', value: this.config.spawnX, min: 0, max: 3200, step: 32, category: 'Spawn' },
+      { key: 'spawnY', label: 'Spawn Y', value: this.config.spawnY, min: 0, max: 960, step: 32, category: 'Spawn' },
     ];
   }
 

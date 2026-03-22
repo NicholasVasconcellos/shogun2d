@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shogun 2D — Documentation</title>
+  <style>
+    :root {
+      --bg: #0e0e1a;
+      --surface: #151525;
+      --surface2: #1c1c32;
+      --border: #2a2a44;
+      --accent: #e85d04;
+      --accent-dim: #a34003;
+      --text: #d0d0e0;
+      --text-muted: #8888aa;
+      --cyan: #7fdbca;
+      --yellow: #ffd93d;
+      --red: #ff6b6b;
+      --green: #6bffb8;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    /* Layout */
+    .page { display: flex; min-height: 100vh; }
+    nav {
+      position: fixed;
+      top: 0; left: 0;
+      width: 260px;
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 16px;
+      z-index: 10;
+    }
+    main {
+      margin-left: 260px;
+      padding: 40px 48px;
+      max-width: 860px;
+      flex: 1;
+    }
+
+    /* Nav */
+    nav .logo {
+      color: var(--accent);
+      font-size: 16px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      margin-bottom: 4px;
+    }
+    nav .subtitle {
+      color: var(--text-muted);
+      font-size: 11px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    nav a {
+      display: block;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+    nav a:hover, nav a.active {
+      color: var(--text);
+      background: var(--surface2);
+    }
+    nav .nav-group {
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 1.5px;
+      margin-top: 18px;
+      margin-bottom: 6px;
+      padding-left: 10px;
+    }
+    nav .back-link {
+      display: inline-block;
+      color: var(--accent);
+      font-size: 12px;
+      margin-bottom: 16px;
+      text-decoration: none;
+      opacity: 0.8;
+    }
+    nav .back-link:hover { opacity: 1; }
+
+    /* Content */
+    h1 {
+      font-size: 28px;
+      color: var(--accent);
+      margin-bottom: 8px;
+      letter-spacing: 1px;
+    }
+    h1 + p { color: var(--text-muted); margin-bottom: 32px; }
+    h2 {
+      font-size: 18px;
+      color: #fff;
+      margin-top: 48px;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 14px;
+      color: var(--cyan);
+      margin-top: 28px;
+      margin-bottom: 10px;
+    }
+    p { margin-bottom: 14px; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      font-size: 12px;
+    }
+    th {
+      text-align: left;
+      color: var(--accent);
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 8px 12px;
+      border-bottom: 2px solid var(--border);
+    }
+    td {
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:hover td { background: var(--surface); }
+    td:first-child { color: var(--cyan); white-space: nowrap; }
+
+    /* Code */
+    code {
+      background: var(--surface2);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 12px;
+      color: var(--cyan);
+    }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin: 12px 0 20px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+    }
+
+    /* Key badges */
+    kbd {
+      display: inline-block;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      color: var(--yellow);
+      font-family: inherit;
+      min-width: 24px;
+      text-align: center;
+    }
+
+    /* Info boxes */
+    .info-box {
+      background: var(--surface);
+      border-left: 3px solid var(--accent);
+      padding: 12px 16px;
+      margin: 16px 0;
+      border-radius: 0 6px 6px 0;
+      font-size: 13px;
+    }
+    .info-box.tip { border-left-color: var(--green); }
+    .info-box.warn { border-left-color: var(--yellow); }
+    .info-box .label {
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+    .info-box.tip .label { color: var(--green); }
+    .info-box.warn .label { color: var(--yellow); }
+
+    /* Diagrams */
+    .diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px;
+      margin: 16px 0 24px;
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: pre;
+      overflow-x: auto;
+      color: var(--text-muted);
+    }
+    .diagram .hl { color: var(--accent); }
+    .diagram .cy { color: var(--cyan); }
+    .diagram .yw { color: var(--yellow); }
+
+    /* File tree */
+    .file-tree {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px 20px;
+      margin: 12px 0 20px;
+      font-size: 12px;
+      line-height: 1.8;
+    }
+    .file-tree .dir { color: var(--yellow); }
+    .file-tree .file { color: var(--text-muted); }
+    .file-tree .desc { color: var(--text-muted); opacity: 0.6; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      nav { display: none; }
+      main { margin-left: 0; padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+<!-- Sidebar Navigation -->
+<nav>
+  <a href="/" class="back-link">&larr; Back to Game</a>
+  <div class="logo">SHOGUN 2D</div>
+  <div class="subtitle">Internal Documentation</div>
+
+  <div class="nav-group">OVERVIEW</div>
+  <a href="#architecture">Architecture</a>
+  <a href="#project-structure">Project Structure</a>
+  <a href="#scene-flow">Scene Flow</a>
+
+  <div class="nav-group">CONTROLS</div>
+  <a href="#keyboard-controls">Keyboard</a>
+  <a href="#touch-controls">Touch / Mobile</a>
+  <a href="#debug-keys">Debug Keys</a>
+
+  <div class="nav-group">PLAYER</div>
+  <a href="#movement-system">Movement System</a>
+  <a href="#movement-config">Movement Config</a>
+  <a href="#jump-mechanics">Jump Mechanics</a>
+  <a href="#wall-mechanics">Wall Mechanics</a>
+  <a href="#dash-mechanics">Dash Mechanics</a>
+  <a href="#animation-states">Animation States</a>
+
+  <div class="nav-group">LEVEL</div>
+  <a href="#level-builder">Level Builder</a>
+  <a href="#collision-system">Collision System</a>
+  <a href="#parallax-background">Parallax Background</a>
+  <a href="#decorations">Decorations</a>
+
+  <div class="nav-group">DEV TOOLS</div>
+  <a href="#dev-panel">Dev Panel</a>
+  <a href="#serialized-fields">Serialized Fields</a>
+
+  <div class="nav-group">ASSETS</div>
+  <a href="#sprite-sheets">Sprite Sheets</a>
+  <a href="#animations">Animations</a>
+  <a href="#tilesets">Tilesets &amp; Props</a>
+</nav>
+
+<!-- Main Content -->
+<main>
+
+<h1>Shogun 2D</h1>
+<p>Internal documentation — engine architecture, controls reference, and system breakdowns.</p>
+
+<!-- ============================================ -->
+<h2 id="architecture">Architecture</h2>
+
+<p>Shogun 2D is built on <strong>Phaser 3.87</strong> with Arcade Physics. The project uses Vite for bundling and TypeScript throughout.</p>
+
+<div class="diagram"><span class="hl">Phaser.Game</span>
+  ├─ <span class="cy">BootScene</span>        Load all assets, create animations, then start Game
+  └─ <span class="cy">GameScene</span>        Main gameplay loop
+       ├─ <span class="yw">LevelBuilder</span>   Procedural level geometry + decorations
+       ├─ <span class="yw">PlayerController</span>  Movement, input, physics, animation
+       └─ <span class="yw">DevPanel</span>       Runtime parameter tuning (DOM overlay)</div>
+
+<div class="info-box">
+  <div class="label">GAME CONFIG</div>
+  Resolution: <code>960 x 540</code> &middot; Pixel art mode enabled &middot; Arcade physics with gravity <code>800</code> &middot; Scale mode: <code>FIT</code> + center
+</div>
+
+<!-- ============================================ -->
+<h2 id="project-structure">Project Structure</h2>
+
+<div class="file-tree">
+<span class="dir">src/</span>
+  <span class="file">main.ts</span>             <span class="desc">— Phaser.Game bootstrap + config</span>
+  <span class="dir">scenes/</span>
+    <span class="file">BootScene.ts</span>      <span class="desc">— Asset loading + animation creation</span>
+    <span class="file">GameScene.ts</span>      <span class="desc">— Main game loop, colliders, camera</span>
+  <span class="dir">player/</span>
+    <span class="file">PlayerController.ts</span> <span class="desc">— All player logic, input, and config</span>
+  <span class="dir">level/</span>
+    <span class="file">LevelBuilder.ts</span>   <span class="desc">— Ground, platforms, walls, decorations</span>
+  <span class="dir">debug/</span>
+    <span class="file">DevPanel.ts</span>       <span class="desc">— Runtime slider UI for tuning</span>
+<span class="dir">public/</span>
+  <span class="dir">assets/</span>            <span class="desc">— Sprites, backgrounds, tilesets</span>
+  <span class="file">docs.html</span>          <span class="desc">— This documentation page</span>
+<span class="file">index.html</span>             <span class="desc">— Game entry point</span>
+</div>
+
+<!-- ============================================ -->
+<h2 id="scene-flow">Scene Flow</h2>
+
+<div class="diagram"><span class="cy">BootScene.preload()</span>
+  │  Load 22 samurai sprite sheets (96×96 frames)
+  │  Load 3 parallax background layers
+  │  Load tileset, trees, props, objects, flag sheet
+  │  Show progress bar during load
+  ▼
+<span class="cy">BootScene.create()</span>
+  │  Create 10 player animations + flag animation
+  │  Transition to Game scene
+  ▼
+<span class="cy">GameScene.create()</span>
+  │  Build level geometry (LevelBuilder)
+  │  Spawn player at configured spawn position
+  │  Register colliders: player ↔ platforms, player ↔ walls
+  │  Configure camera bounds + follow player
+  │  Create DevPanel (if devMode)
+  ▼
+<span class="cy">GameScene.update(delta)</span>  <span class="yw">← runs every frame</span>
+  │  PlayerController.update(delta)
+  │  Check fall-off-world respawn
+  │  DevPanel.update() (refresh stats display)</div>
+
+<!-- ============================================ -->
+<h2 id="keyboard-controls">Keyboard Controls</h2>
+
+<table>
+  <tr><th>Action</th><th>Key</th><th>Details</th></tr>
+  <tr><td>Move Left</td><td><kbd>&larr;</kbd></td><td>Accelerates toward move speed</td></tr>
+  <tr><td>Move Right</td><td><kbd>&rarr;</kbd></td><td>Accelerates toward move speed</td></tr>
+  <tr><td>Jump</td><td><kbd>Space</kbd> / <kbd>&uarr;</kbd></td><td>Variable height — release early for short hop</td></tr>
+  <tr><td>Run</td><td><kbd>Shift</kbd> (hold)</td><td>Multiplies move speed by run multiplier</td></tr>
+  <tr><td>Dash</td><td><kbd>X</kbd></td><td>Burst of speed in facing direction, has cooldown</td></tr>
+  <tr><td>Respawn</td><td><kbd>R</kbd></td><td>Teleport back to spawn position</td></tr>
+</table>
+
+<!-- ============================================ -->
+<h2 id="touch-controls">Touch / Mobile Controls</h2>
+
+<p>Detected automatically on non-desktop devices. Three on-screen elements are created:</p>
+
+<table>
+  <tr><th>Element</th><th>Position</th><th>Behavior</th></tr>
+  <tr><td>Joystick</td><td>Bottom-left</td><td>Drag horizontally to move. 50px radius base, 40px max deflection. Returns to center on release.</td></tr>
+  <tr><td>A Button</td><td>Bottom-right</td><td>Jump (orange circle, 35px radius)</td></tr>
+  <tr><td>B Button</td><td>Left of A</td><td>Dash (blue circle, 30px radius)</td></tr>
+</table>
+
+<div class="info-box tip">
+  <div class="label">TIP</div>
+  The left half of the screen is the joystick zone. Touch anywhere on the left side to activate the joystick — you don't need to start on the base circle.
+</div>
+
+<!-- ============================================ -->
+<h2 id="debug-keys">Debug Keys</h2>
+
+<table>
+  <tr><th>Key</th><th>Action</th></tr>
+  <tr><td><kbd>`</kbd> / <kbd>F1</kbd></td><td>Toggle dev panel visibility</td></tr>
+  <tr><td><kbd>F2</kbd></td><td>Toggle physics debug overlay (shows collision bodies)</td></tr>
+  <tr><td><kbd>R</kbd></td><td>Respawn player at spawn position</td></tr>
+</table>
+
+<!-- ============================================ -->
+<h2 id="movement-system">Movement System</h2>
+
+<p>The player controller runs a state-based movement system each frame. The priority order is:</p>
+
+<div class="diagram"><span class="hl">1.</span> Apply gravity scale
+<span class="hl">2.</span> Ground check   → <code>body.blocked.down || body.touching.down</code>
+<span class="hl">3.</span> Wall check     → <code>body.blocked.left || body.blocked.right</code>
+<span class="hl">4.</span> Update timers  → coyote, jump buffer, wall-jump lock, dash cooldown
+<span class="hl">5.</span> Dash logic     → if dashing, maintain velocity and skip movement
+<span class="hl">6.</span> Horizontal     → acceleration-based movement toward target speed
+<span class="hl">7.</span> Jumping        → coyote time + buffer; wall jump; variable height
+<span class="hl">8.</span> Fall gravity   → increased gravity when falling (fall multiplier)
+<span class="hl">9.</span> Wall slide     → cap downward velocity when sliding
+<span class="hl">10.</span> Dash trigger  → initiate dash, disable gravity
+<span class="hl">11.</span> Animation     → select animation from movement state</div>
+
+<h3>Acceleration Model</h3>
+<p>Horizontal movement uses separate acceleration and deceleration values for ground and air:</p>
+<pre><code>targetSpeed = inputX * moveSpeed * (running ? runMultiplier : 1)
+accel = grounded ? (moving ? acceleration : deceleration)
+                 : (moving ? airAcceleration : airDeceleration)
+diff = targetSpeed - currentVelocityX
+change = accel * (delta / 1000)
+newVelocity = currentVelocityX + sign(diff) * min(change, abs(diff))</code></pre>
+
+<div class="info-box">
+  <div class="label">NOTE</div>
+  The wall jump lock timer prevents horizontal input from overriding wall jump velocity for a short window, giving the wall jump a committed arc.
+</div>
+
+<!-- ============================================ -->
+<h2 id="movement-config">Movement Config</h2>
+
+<p>All parameters are exposed as serialized fields and can be tuned live via the dev panel.</p>
+
+<h3>Horizontal</h3>
+<table>
+  <tr><th>Parameter</th><th>Default</th><th>Range</th><th>Description</th></tr>
+  <tr><td>moveSpeed</td><td>160</td><td>50–500</td><td>Base horizontal speed (px/s)</td></tr>
+  <tr><td>runMultiplier</td><td>1.6</td><td>1–3</td><td>Speed multiplier when holding run</td></tr>
+  <tr><td>acceleration</td><td>1200</td><td>100–3000</td><td>Ground acceleration (px/s²)</td></tr>
+  <tr><td>deceleration</td><td>1600</td><td>100–3000</td><td>Ground deceleration (px/s²)</td></tr>
+  <tr><td>airAcceleration</td><td>800</td><td>100–2000</td><td>Aerial acceleration (px/s²)</td></tr>
+  <tr><td>airDeceleration</td><td>400</td><td>100–2000</td><td>Aerial deceleration (px/s²)</td></tr>
+</table>
+
+<h3>Jump</h3>
+<table>
+  <tr><th>Parameter</th><th>Default</th><th>Range</th><th>Description</th></tr>
+  <tr><td>jumpForce</td><td>340</td><td>100–800</td><td>Initial upward velocity on jump</td></tr>
+  <tr><td>jumpCutMultiplier</td><td>0.4</td><td>0.1–1</td><td>Velocity multiplier when releasing jump early</td></tr>
+  <tr><td>coyoteTime</td><td>80 ms</td><td>0–300</td><td>Grace period to jump after leaving a ledge</td></tr>
+  <tr><td>jumpBufferTime</td><td>100 ms</td><td>0–300</td><td>Input buffering — press jump just before landing</td></tr>
+  <tr><td>maxFallSpeed</td><td>450</td><td>100–1000</td><td>Terminal velocity cap</td></tr>
+  <tr><td>fallMultiplier</td><td>1.5</td><td>1–4</td><td>Extra gravity when falling (snappier feel)</td></tr>
+</table>
+
+<h3>Wall</h3>
+<table>
+  <tr><th>Parameter</th><th>Default</th><th>Range</th><th>Description</th></tr>
+  <tr><td>wallSlideSpeed</td><td>60</td><td>10–200</td><td>Max downward speed during wall slide</td></tr>
+  <tr><td>wallJumpForce</td><td>300</td><td>100–600</td><td>Upward velocity of wall jump</td></tr>
+  <tr><td>wallJumpHorizontalForce</td><td>200</td><td>50–500</td><td>Horizontal push away from wall</td></tr>
+  <tr><td>wallJumpLockTime</td><td>200 ms</td><td>50–500</td><td>Duration player input is locked after wall jump</td></tr>
+</table>
+
+<h3>Dash</h3>
+<table>
+  <tr><th>Parameter</th><th>Default</th><th>Range</th><th>Description</th></tr>
+  <tr><td>dashSpeed</td><td>400</td><td>100–800</td><td>Velocity during dash</td></tr>
+  <tr><td>dashDuration</td><td>150 ms</td><td>50–500</td><td>How long the dash lasts</td></tr>
+  <tr><td>dashCooldown</td><td>600 ms</td><td>100–2000</td><td>Minimum time between dashes</td></tr>
+</table>
+
+<h3>Physics</h3>
+<table>
+  <tr><th>Parameter</th><th>Default</th><th>Range</th><th>Description</th></tr>
+  <tr><td>gravityScale</td><td>1.0</td><td>0.1–3</td><td>Multiplier on world gravity (800 px/s²)</td></tr>
+</table>
+
+<h3>Spawn</h3>
+<table>
+  <tr><th>Parameter</th><th>Default</th><th>Range</th><th>Description</th></tr>
+  <tr><td>spawnX</td><td>160</td><td>0–3200</td><td>Respawn X position</td></tr>
+  <tr><td>spawnY</td><td>(calculated)</td><td>0–960</td><td>Respawn Y position (set from level at init)</td></tr>
+</table>
+
+<!-- ============================================ -->
+<h2 id="jump-mechanics">Jump Mechanics</h2>
+
+<h3>Coyote Time</h3>
+<p>When the player walks off a ledge, a timer starts counting down from <code>coyoteTime</code> (default 80ms). During this window, pressing jump still works as if grounded — essential for platforming feel.</p>
+
+<h3>Jump Buffering</h3>
+<p>When jump is pressed mid-air, a buffer timer starts at <code>jumpBufferTime</code> (default 100ms). If the player lands before the buffer expires, the jump executes automatically. Both systems combine: you can walk off a ledge and buffer a jump during coyote time.</p>
+
+<h3>Variable Jump Height</h3>
+<p>Releasing the jump key while ascending multiplies upward velocity by <code>jumpCutMultiplier</code> (default 0.4). This gives a short hop on tap and full jump on hold.</p>
+
+<h3>Fall Multiplier</h3>
+<p>When <code>velocity.y > 0</code> (falling), gravity is multiplied by <code>fallMultiplier</code> (default 1.5). This makes the fall arc feel snappier and more responsive than a symmetric parabola.</p>
+
+<!-- ============================================ -->
+<h2 id="wall-mechanics">Wall Mechanics</h2>
+
+<h3>Wall Slide</h3>
+<p>Conditions: not grounded + touching wall + falling + holding directional input toward the wall. When active, downward velocity is capped to <code>wallSlideSpeed</code>.</p>
+
+<h3>Wall Jump</h3>
+<p>Press jump while touching a wall (and not grounded) to wall jump. The player receives:</p>
+<ul style="margin: 8px 0 16px 24px;">
+  <li>Upward velocity: <code>-wallJumpForce</code></li>
+  <li>Horizontal velocity: <code>-wallDirection * wallJumpHorizontalForce</code> (away from wall)</li>
+  <li>Facing flips to face away from the wall</li>
+  <li>Input is locked for <code>wallJumpLockTime</code> to commit the arc</li>
+</ul>
+
+<!-- ============================================ -->
+<h2 id="dash-mechanics">Dash Mechanics</h2>
+
+<p>Press <kbd>X</kbd> (or B button on mobile) to dash. Gravity is disabled during the dash. The player moves at <code>dashSpeed</code> in the facing direction for <code>dashDuration</code> ms. A cooldown of <code>dashCooldown</code> ms prevents spamming. During the dash, all other movement input is skipped — the update loop returns early after the animation step.</p>
+
+<!-- ============================================ -->
+<h2 id="animation-states">Animation States</h2>
+
+<p>Animation is selected each frame based on movement state, in priority order:</p>
+
+<table>
+  <tr><th>Priority</th><th>Animation Key</th><th>Condition</th><th>Sheet</th><th>Frames</th><th>FPS</th></tr>
+  <tr><td>1</td><td>player-dash</td><td>isDashing</td><td>samurai-dash</td><td>8</td><td>16</td></tr>
+  <tr><td>2</td><td>player-wall-slide</td><td>Airborne + wall + falling + input toward wall</td><td>samurai-wall-slide</td><td>3</td><td>8</td></tr>
+  <tr><td>3</td><td>player-jump</td><td>Airborne + velocity.y &lt; 0</td><td>samurai-jump</td><td>3</td><td>8</td></tr>
+  <tr><td>4</td><td>player-fall</td><td>Airborne + velocity.y &ge; 0</td><td>samurai-jump-fall</td><td>3</td><td>8</td></tr>
+  <tr><td>5</td><td>player-run</td><td>Grounded + |velocity.x| &gt; 20</td><td>samurai-run</td><td>16</td><td>20</td></tr>
+  <tr><td>6</td><td>player-idle</td><td>Default</td><td>samurai-idle</td><td>10</td><td>10</td></tr>
+</table>
+
+<div class="info-box tip">
+  <div class="label">TIP</div>
+  The sprite is flipped horizontally via <code>setFlipX</code> based on facing direction — no separate left-facing sheets needed.
+</div>
+
+<!-- ============================================ -->
+<h2 id="level-builder">Level Builder</h2>
+
+<p>The level is defined procedurally in <code>LevelBuilder.createLevel()</code>. All coordinates use tile units (<code>T = 32px</code>, which is 16px art scaled 2x).</p>
+
+<h3>World Dimensions</h3>
+<table>
+  <tr><th>Property</th><th>Value</th></tr>
+  <tr><td>WORLD_WIDTH</td><td>3200 px (100 tiles)</td></tr>
+  <tr><td>WORLD_HEIGHT</td><td>960 px (30 tiles)</td></tr>
+  <tr><td>TILE</td><td>32 px</td></tr>
+</table>
+
+<h3>Ground Segments</h3>
+<p>Four ground segments with gaps for pits:</p>
+<table>
+  <tr><th>Segment</th><th>Start (tiles)</th><th>Width (tiles)</th><th>Pixel Range</th></tr>
+  <tr><td>1</td><td>0</td><td>28</td><td>0 – 896</td></tr>
+  <tr><td>2</td><td>31</td><td>20</td><td>992 – 1632</td></tr>
+  <tr><td>3</td><td>54</td><td>30</td><td>1728 – 2688</td></tr>
+  <tr><td>4</td><td>87</td><td>13</td><td>2784 – 3200</td></tr>
+</table>
+
+<h3>Platforms</h3>
+<p>12 floating platforms at varying heights create vertical traversal. See source <code>LevelBuilder.ts</code> lines 73–100 for exact positions.</p>
+
+<h3>Walls</h3>
+<p>5 wall segments for wall-slide and wall-jump mechanics, placed near gaps and in the mid-right section.</p>
+
+<!-- ============================================ -->
+<h2 id="collision-system">Collision System</h2>
+
+<p>Collision uses Phaser's Arcade Physics with <code>StaticGroup</code> bodies.</p>
+
+<h3>Two Collision Groups</h3>
+<table>
+  <tr><th>Group</th><th>Contains</th><th>Purpose</th></tr>
+  <tr><td>platforms</td><td>Ground segments + floating platforms</td><td>Walking, landing, ground detection</td></tr>
+  <tr><td>walls</td><td>Vertical wall segments</td><td>Wall slide, wall jump detection</td></tr>
+</table>
+
+<h3>How Collision Bodies Work</h3>
+<p>Each level element has two parts:</p>
+<ol style="margin: 8px 0 16px 24px;">
+  <li><strong>Visual</strong>: A <code>TileSprite</code> for rendering (scaled 2x from 16px art)</li>
+  <li><strong>Physics</strong>: An invisible <code>StaticBody</code> in the appropriate group with explicit size via <code>setSize</code> + <code>setOffset</code></li>
+</ol>
+
+<p>Colliders are registered in <code>GameScene.create()</code>:</p>
+<pre><code>this.physics.add.collider(player.sprite, level.platforms);
+this.physics.add.collider(player.sprite, level.walls);</code></pre>
+
+<h3>Player Collision Box</h3>
+<p>The player sprite is 96x96 but the physics body is trimmed to <code>24x40</code> with offset <code>(36, 50)</code>, fitting tightly around the character's torso and legs.</p>
+
+<h3>Detection Flags</h3>
+<table>
+  <tr><th>Flag</th><th>Meaning</th><th>Used For</th></tr>
+  <tr><td>body.blocked.down</td><td>Standing on a static body</td><td>Ground check</td></tr>
+  <tr><td>body.touching.down</td><td>Overlapping downward</td><td>Ground check (backup)</td></tr>
+  <tr><td>body.blocked.left/right</td><td>Touching a wall</td><td>Wall slide/jump direction</td></tr>
+</table>
+
+<!-- ============================================ -->
+<h2 id="parallax-background">Parallax Background</h2>
+
+<p>Three layers of 320x180 background art, scaled to fill the world height:</p>
+
+<table>
+  <tr><th>Layer</th><th>Asset</th><th>Scroll Factor</th><th>Depth</th><th>Visual</th></tr>
+  <tr><td>Back</td><td>bg-back</td><td>0.1</td><td>-30</td><td>Dark forest silhouettes</td></tr>
+  <tr><td>Mid</td><td>bg-mid</td><td>0.3</td><td>-20</td><td>Lighter forest</td></tr>
+  <tr><td>Front</td><td>bg-front</td><td>0.6</td><td>-10</td><td>Closest trees</td></tr>
+</table>
+
+<p>Each layer is tiled horizontally to cover the world width. The scroll factor creates depth through differential movement when the camera pans.</p>
+
+<!-- ============================================ -->
+<h2 id="decorations">Decorations</h2>
+
+<p>Placed along the ground at fixed positions. All decorative — no collision.</p>
+
+<table>
+  <tr><th>Type</th><th>Asset</th><th>Count</th><th>Notes</th></tr>
+  <tr><td>Trees</td><td>trees</td><td>7</td><td>Randomly picks 1 of 3 tree sprites from the sheet using <code>setCrop</code></td></tr>
+  <tr><td>Props</td><td>props</td><td>8</td><td>Bushes, rocks scattered along ground</td></tr>
+  <tr><td>Objects</td><td>objects</td><td>3</td><td>Torii gate, lantern, well</td></tr>
+  <tr><td>Flags</td><td>flag</td><td>4</td><td>Animated (6-frame wave at 8 FPS)</td></tr>
+</table>
+
+<!-- ============================================ -->
+<h2 id="dev-panel">Dev Panel</h2>
+
+<p>A DOM overlay fixed to the right side of the viewport. Provides real-time stats and sliders for every movement parameter.</p>
+
+<h3>Runtime Display</h3>
+<table>
+  <tr><th>Field</th><th>Info</th></tr>
+  <tr><td>FPS</td><td>Color-coded: <span style="color:#7fdbca">green</span> &ge;55, <span style="color:#ffd93d">yellow</span> 30–54, <span style="color:#ff6b6b">red</span> &lt;30</td></tr>
+  <tr><td>Position</td><td>Player sprite x, y (rounded)</td></tr>
+  <tr><td>Velocity</td><td>Player body velocity x, y (rounded)</td></tr>
+  <tr><td>State</td><td>Active flags: GND, WALL, JUMP, FALL (or AIR if none)</td></tr>
+</table>
+
+<h3>Parameter Sliders</h3>
+<p>Grouped by category (Horizontal, Jump, Wall, Dash, Physics, Spawn). Each slider updates the corresponding <code>MovementConfig</code> value in real time via <code>setConfigValue()</code>. The "Reset All to Defaults" button restores original values.</p>
+
+<div class="info-box warn">
+  <div class="label">NOTE</div>
+  Slider changes are <strong>not persisted</strong>. Refreshing the page resets all values to defaults defined in <code>DEFAULT_CONFIG</code>.
+</div>
+
+<!-- ============================================ -->
+<h2 id="serialized-fields">Serialized Fields</h2>
+
+<p>The <code>SerializedField</code> interface describes each tunable parameter:</p>
+
+<pre><code>interface SerializedField {
+  key: string;       // Config property name
+  label: string;     // Human-readable label
+  value: number;     // Current value
+  min: number;       // Slider minimum
+  max: number;       // Slider maximum
+  step: number;      // Slider increment
+  category: string;  // Grouping in the dev panel
+}</code></pre>
+
+<p><code>getSerializedFields()</code> returns the full array (22 fields). <code>setConfigValue(key, value)</code> writes back. Special handling: changing <code>maxFallSpeed</code> also calls <code>body.setMaxVelocityY()</code> for immediate effect.</p>
+
+<!-- ============================================ -->
+<h2 id="sprite-sheets">Sprite Sheets</h2>
+
+<p>All samurai animations use <strong>96x96 px</strong> frames. 22 sheets are loaded in BootScene:</p>
+
+<table>
+  <tr><th>Sheet</th><th>Frames</th><th>Used In Animation</th></tr>
+  <tr><td>idle</td><td>10</td><td>player-idle</td></tr>
+  <tr><td>run</td><td>16</td><td>player-run</td></tr>
+  <tr><td>walk</td><td>12</td><td>(available, not currently used)</td></tr>
+  <tr><td>jump</td><td>3</td><td>player-jump</td></tr>
+  <tr><td>jump-start</td><td>3</td><td>player-jump-start</td></tr>
+  <tr><td>jump-fall</td><td>3</td><td>player-fall</td></tr>
+  <tr><td>jump-transition</td><td>3</td><td>(available)</td></tr>
+  <tr><td>dash</td><td>8</td><td>player-dash</td></tr>
+  <tr><td>attack-1</td><td>7</td><td>player-attack-1</td></tr>
+  <tr><td>attack-2</td><td>7</td><td>(available)</td></tr>
+  <tr><td>attack-3</td><td>6</td><td>(available)</td></tr>
+  <tr><td>air-attack</td><td>6</td><td>(available)</td></tr>
+  <tr><td>death</td><td>9</td><td>(available)</td></tr>
+  <tr><td>hurt</td><td>4</td><td>player-hurt</td></tr>
+  <tr><td>defend</td><td>6</td><td>(available)</td></tr>
+  <tr><td>wall-slide</td><td>3</td><td>player-wall-slide</td></tr>
+  <tr><td>wall-contact</td><td>3</td><td>(available)</td></tr>
+  <tr><td>wall-jump</td><td>3</td><td>(available)</td></tr>
+  <tr><td>climbing</td><td>8</td><td>(available)</td></tr>
+  <tr><td>healing</td><td>15</td><td>(available)</td></tr>
+  <tr><td>healing-no-effect</td><td>15</td><td>(available)</td></tr>
+  <tr><td>special-attack</td><td>14</td><td>(available)</td></tr>
+  <tr><td>throw</td><td>7</td><td>(available)</td></tr>
+</table>
+
+<!-- ============================================ -->
+<h2 id="animations">Animations</h2>
+
+<p>10 player animations are registered in <code>BootScene.create()</code>:</p>
+
+<table>
+  <tr><th>Key</th><th>FPS</th><th>Loop</th></tr>
+  <tr><td>player-idle</td><td>10</td><td>Yes</td></tr>
+  <tr><td>player-run</td><td>20</td><td>Yes</td></tr>
+  <tr><td>player-walk</td><td>12</td><td>Yes</td></tr>
+  <tr><td>player-jump</td><td>8</td><td>No</td></tr>
+  <tr><td>player-jump-start</td><td>10</td><td>No</td></tr>
+  <tr><td>player-fall</td><td>8</td><td>Yes</td></tr>
+  <tr><td>player-dash</td><td>16</td><td>No</td></tr>
+  <tr><td>player-wall-slide</td><td>8</td><td>Yes</td></tr>
+  <tr><td>player-attack-1</td><td>14</td><td>No</td></tr>
+  <tr><td>player-hurt</td><td>10</td><td>No</td></tr>
+</table>
+
+<p>Plus <code>flag-wave</code> (6 frames, 8 FPS, looping) for decorative flags.</p>
+
+<!-- ============================================ -->
+<h2 id="tilesets">Tilesets &amp; Props</h2>
+
+<table>
+  <tr><th>Asset Key</th><th>File</th><th>Usage</th></tr>
+  <tr><td>tileset</td><td>forest/tileset/Tileset.png</td><td>Ground surface + fill, platform surface, wall tiles (via TileSprite)</td></tr>
+  <tr><td>tileset-v2</td><td>forest/tileset/Tileset_v2.png</td><td>Loaded but not currently used</td></tr>
+  <tr><td>trees</td><td>forest/trees/Trees.png</td><td>400x160 sheet, 3 trees at ~133px each</td></tr>
+  <tr><td>objects</td><td>forest/props/Objects.png</td><td>Torii gate, lantern, well</td></tr>
+  <tr><td>props</td><td>forest/props/Props.png</td><td>Small ground decorations (256x32)</td></tr>
+  <tr><td>flag</td><td>forest/props/Flag.png</td><td>29x64 frame spritesheet (6 frames)</td></tr>
+</table>
+
+</main>
+</div>
+
+<!-- Highlight active nav link on scroll -->
+<script>
+  const links = document.querySelectorAll('nav a[href^="#"]');
+  const sections = [...links].map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  window.addEventListener('scroll', () => {
+    let current = '';
+    for (const s of sections) {
+      if (s.getBoundingClientRect().top <= 80) current = s.id;
+    }
+    links.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }, { passive: true });
+</script>
+</body>
+</html>

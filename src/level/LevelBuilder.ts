@@ -136,14 +136,15 @@ export class LevelBuilder {
     fill.setDepth(1);
 
     // Physics body
-    const body = this.platforms.create(
+    const platform = this.platforms.create(
       x + (widthInTiles * T) / 2,
       y + T / 2,
       undefined
     ) as Phaser.Physics.Arcade.Sprite;
-    body.setVisible(false);
-    body.setDisplaySize(widthInTiles * T, T * 2);
-    body.refreshBody();
+    platform.setVisible(false);
+    const platformBody = platform.body as Phaser.Physics.Arcade.StaticBody;
+    platformBody.setSize(widthInTiles * T, T * 2);
+    platformBody.setOffset(-(widthInTiles * T) / 2, -T);
   }
 
   /** Add a floating platform */
@@ -161,14 +162,15 @@ export class LevelBuilder {
     surface.setScale(2);
     surface.setDepth(1);
 
-    const body = this.platforms.create(
+    const plat = this.platforms.create(
       x + (widthInTiles * T) / 2,
       y + T / 2,
       undefined
     ) as Phaser.Physics.Arcade.Sprite;
-    body.setVisible(false);
-    body.setDisplaySize(widthInTiles * T, T);
-    body.refreshBody();
+    plat.setVisible(false);
+    const platBody = plat.body as Phaser.Physics.Arcade.StaticBody;
+    platBody.setSize(widthInTiles * T, T);
+    platBody.setOffset(-(widthInTiles * T) / 2, -T / 2);
   }
 
   /** Add a vertical wall */
@@ -187,14 +189,15 @@ export class LevelBuilder {
     wall.setTint(0x5a3d2b);
     wall.setDepth(1);
 
-    const body = this.walls.create(
+    const wallBody = this.walls.create(
       x + T / 2,
       y + (heightInTiles * T) / 2,
       undefined
     ) as Phaser.Physics.Arcade.Sprite;
-    body.setVisible(false);
-    body.setDisplaySize(T, heightInTiles * T);
-    body.refreshBody();
+    wallBody.setVisible(false);
+    const wb = wallBody.body as Phaser.Physics.Arcade.StaticBody;
+    wb.setSize(T, heightInTiles * T);
+    wb.setOffset(-T / 2, -(heightInTiles * T) / 2);
   }
 
   private createDecorations(): void {
