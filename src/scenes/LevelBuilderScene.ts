@@ -6,6 +6,7 @@ import {
   deleteLevelTile,
   getLevelTiles,
   PlacedTileData,
+  restoreLevelTile,
   updateLevelTile,
 } from '../level/levelState';
 
@@ -17,38 +18,43 @@ interface PlacedAsset {
   deleteButton: Phaser.GameObjects.Container;
 }
 
+interface UndoAction {
+  undo: () => void;
+  redo: () => void;
+}
+
 export class LevelBuilderScene extends Phaser.Scene {
-  private readonly paletteWidth = 240;
-  private readonly paletteTop = 170;
-  private readonly palettePadding = 16;
-  private readonly iconSize = 56;
   private readonly gridSize = 32;
 
   private level!: LevelBuilder;
   private selectedAsset: BuilderAssetDefinition = BUILDER_ASSETS[0];
   private colliderWidth = BUILDER_ASSETS[0].defaultColliderWidth;
   private colliderHeight = BUILDER_ASSETS[0].defaultColliderHeight;
-  private paletteScrollY = 0;
-  private paletteContentHeight = 0;
 
-  private paletteItems: Array<{
-    container: Phaser.GameObjects.Container;
-    frameRect: Phaser.GameObjects.Rectangle;
-    asset: BuilderAssetDefinition;
-  }> = [];
-  private paletteMaskShape!: Phaser.GameObjects.Graphics;
-  private dragPreview?: Phaser.GameObjects.Image;
-  private dragPreviewCollider?: Phaser.GameObjects.Rectangle;
+  // DOM references
+  private uiRoot!: HTMLDivElement;
+  private assetItems: HTMLDivElement[] = [];
+  private selectedLabel!: HTMLSpanElement;
+  private colliderLabel!: HTMLSpanElement;
+  private widthValueEl!: HTMLSpanElement;
+  private heightValueEl!: HTMLSpanElement;
+
+  // Canvas objects
+  private placementPreview?: Phaser.GameObjects.Image;
+  private placementPreviewCollider?: Phaser.GameObjects.Rectangle;
   private selectedPlacedAsset?: PlacedAsset;
-
-  private hudTexts!: {
-    selected: Phaser.GameObjects.Text;
-    collider: Phaser.GameObjects.Text;
-    help: Phaser.GameObjects.Text;
-  };
-
   private cameraKeys?: Record<string, Phaser.Input.Keyboard.Key>;
   private placedAssets: PlacedAsset[] = [];
+  private lastDragPlaceKey?: string;
+  private isPainting = false;
+  private paintBatchTileIds: string[] = [];
+
+  // Undo / redo
+  private undoStack: UndoAction[] = [];
+  private redoStack: UndoAction[] = [];
+  private undoBtn!: HTMLButtonElement;
+  private redoBtn!: HTMLButtonElement;
+  private dragStartPos?: { x: number; y: number };
 
   private playerX?: number;
   private playerY?: number;
@@ -78,12 +84,11 @@ export class LevelBuilderScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, this.level.WORLD_WIDTH, this.level.WORLD_HEIGHT);
     this.cameras.main.setZoom(1);
 
-    // Show player sprite if position was passed
     if (this.playerX !== undefined && this.playerY !== undefined) {
       const playerSprite = this.add.sprite(this.playerX, this.playerY, 'samurai-idle')
         .setScale(2)
         .setDepth(100)
-        .setAlpha(0.7); // Slightly faded to show it's "fixed" and not active
+        .setAlpha(0.7);
 
       if (this.playerFlipX !== undefined) {
         playerSprite.setFlipX(this.playerFlipX);
@@ -96,17 +101,21 @@ export class LevelBuilderScene extends Phaser.Scene {
       }
     }
 
-    this.createPalette();
-    this.createHud();
+    this.input.topOnly = true;
+
+    this.buildUI();
+    this.createPlacementPreview();
     this.loadPlacedTiles();
     this.registerInput();
-    this.refreshHud();
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.uiRoot.remove();
+      this.assetItems = [];
+    });
   }
 
   update(_time: number, delta: number): void {
-    if (!this.cameraKeys) {
-      return;
-    }
+    if (!this.cameraKeys) return;
 
     const cam = this.cameras.main;
     const speed = (delta / 1000) * 520;
@@ -114,148 +123,286 @@ export class LevelBuilderScene extends Phaser.Scene {
     if (this.cameraKeys.left.isDown) {
       cam.scrollX = Math.max(0, cam.scrollX - speed);
     }
-
     if (this.cameraKeys.right.isDown) {
       cam.scrollX = Math.min(this.level.WORLD_WIDTH - cam.width, cam.scrollX + speed);
     }
-
     if (this.cameraKeys.up.isDown) {
       cam.scrollY = Math.max(0, cam.scrollY - speed);
     }
-
     if (this.cameraKeys.down.isDown) {
       cam.scrollY = Math.min(this.level.WORLD_HEIGHT - cam.height, cam.scrollY + speed);
     }
+
+    // Update placement preview position
+    if (this.placementPreview && this.placementPreviewCollider) {
+      const pointer = this.input.activePointer;
+      const point = this.getSnappedPoint(pointer);
+      this.placementPreview.setPosition(point.x, point.y);
+      this.placementPreviewCollider.setPosition(point.x, point.y);
+    }
   }
 
-  private createPalette(): void {
-    const cameraHeight = this.scale.height;
+  /* ------------------------------------------------------------------ */
+  /*  HTML UI                                                            */
+  /* ------------------------------------------------------------------ */
 
-    this.add.rectangle(0, 0, this.paletteWidth, cameraHeight, 0x11151c, 0.94)
-      .setOrigin(0, 0)
-      .setScrollFactor(0)
-      .setDepth(1000)
-      .setStrokeStyle(2, 0x314355, 1);
+  private buildUI(): void {
+    this.uiRoot = this.el('div', 'fixed inset-0 z-[1000] pointer-events-none font-sans');
 
-    this.paletteMaskShape = this.add.graphics().setScrollFactor(0).setDepth(1002);
-    this.paletteMaskShape.fillStyle(0xffffff, 1);
-    this.paletteMaskShape.fillRect(0, this.paletteTop, this.paletteWidth, cameraHeight - this.paletteTop);
-    const mask = this.paletteMaskShape.createGeometryMask();
+    const sidebar = this.el('div', [
+      'pointer-events-auto absolute left-0 top-0 bottom-0 w-[260px]',
+      'bg-panel-bg/[0.96] border-r border-brd flex flex-col',
+      'backdrop-blur-sm',
+    ].join(' '));
 
-    const columns = 3;
-    const spacing = 12;
-    const startY = this.paletteTop + 20;
+    // Header
+    const header = this.el('div', 'px-4 pt-4 pb-3 border-b border-brd/60');
+    const titleRow = this.el('div', 'flex items-center justify-between');
+    const title = this.el('span', 'font-mono font-semibold text-sm tracking-widest text-accent');
+    title.textContent = 'LEVEL BUILDER';
+    const badge = this.el('span', 'font-mono text-[10px] text-txt-muted bg-panel-surface px-2 py-0.5 rounded');
+    badge.textContent = `${BUILDER_ASSETS.length} tiles`;
+    titleRow.append(title, badge);
+    header.appendChild(titleRow);
+    sidebar.appendChild(header);
 
-    BUILDER_ASSETS.forEach((asset, index) => {
-      const col = index % columns;
-      const row = Math.floor(index / columns);
-      const x = this.palettePadding + col * (this.iconSize + spacing);
-      const y = startY + row * (this.iconSize + 34);
+    // Info section
+    const infoSection = this.el('div', 'px-4 py-3 border-b border-brd/60 space-y-1.5');
 
-      const frameRect = this.add.rectangle(x, y, this.iconSize, this.iconSize, 0x1b2530, 1)
-        .setOrigin(0, 0)
-        .setStrokeStyle(2, 0x314355, 1);
+    const selectedRow = this.el('div', 'flex items-center gap-2');
+    const selectedPrefix = this.el('span', 'text-[11px] font-sans text-txt-label');
+    selectedPrefix.textContent = 'Selected';
+    this.selectedLabel = this.el('span', 'text-[11px] font-mono text-txt-primary') as HTMLSpanElement;
+    this.selectedLabel.textContent = this.selectedAsset.label;
+    selectedRow.append(selectedPrefix, this.selectedLabel);
 
-      const icon = this.add.image(
-        x + this.iconSize / 2,
-        y + this.iconSize / 2,
-        asset.texture,
-        asset.frame
-      ).setOrigin(0.5);
+    const colliderRow = this.el('div', 'flex items-center gap-2');
+    const colliderPrefix = this.el('span', 'text-[11px] font-sans text-txt-label');
+    colliderPrefix.textContent = 'Collider';
+    this.colliderLabel = this.el('span', 'text-[11px] font-mono text-txt-primary') as HTMLSpanElement;
+    this.colliderLabel.textContent = `${this.colliderWidth} x ${this.colliderHeight}`;
+    colliderRow.append(colliderPrefix, this.colliderLabel);
 
-      const iconScale = Math.min(
-        asset.scale,
-        (this.iconSize - 16) / icon.width,
-        (this.iconSize - 16) / icon.height
-      );
-      icon.setScale(iconScale);
+    infoSection.append(selectedRow, colliderRow);
+    sidebar.appendChild(infoSection);
 
-      const label = this.add.text(x, y + this.iconSize + 4, asset.label, {
-        fontSize: '10px',
-        color: '#d9e2ec',
-        wordWrap: { width: this.iconSize },
-      });
+    // Collider controls
+    const controlsSection = this.el('div', 'px-4 py-3 border-b border-brd/60 space-y-2');
 
-      const hitArea = this.add.zone(x, y, this.iconSize, this.iconSize)
-        .setOrigin(0, 0)
-        .setInteractive({ useHandCursor: true })
-        .setScrollFactor(0)
-        .setDepth(1004);
+    const widthRow = this.el('div', 'flex items-center gap-2');
+    const widthLabel = this.el('span', 'text-[11px] font-sans text-txt-label w-12 shrink-0');
+    widthLabel.textContent = 'Width';
+    const wMinus = this.createCtrlBtn('\u2212', () => this.adjustColliderWidth(-this.gridSize));
+    this.widthValueEl = this.el('span', 'text-xs font-mono text-txt-primary w-10 text-center') as HTMLSpanElement;
+    this.widthValueEl.textContent = String(this.colliderWidth);
+    const wPlus = this.createCtrlBtn('+', () => this.adjustColliderWidth(this.gridSize));
+    widthRow.append(widthLabel, wMinus, this.widthValueEl, wPlus);
 
-      hitArea.setData('asset', asset);
-      hitArea.on('pointerdown', () => {
-        this.selectAsset(asset);
-      });
-      this.input.setDraggable(hitArea);
+    const heightRow = this.el('div', 'flex items-center gap-2');
+    const heightLabel = this.el('span', 'text-[11px] font-sans text-txt-label w-12 shrink-0');
+    heightLabel.textContent = 'Height';
+    const hMinus = this.createCtrlBtn('\u2212', () => this.adjustColliderHeight(-this.gridSize));
+    this.heightValueEl = this.el('span', 'text-xs font-mono text-txt-primary w-10 text-center') as HTMLSpanElement;
+    this.heightValueEl.textContent = String(this.colliderHeight);
+    const hPlus = this.createCtrlBtn('+', () => this.adjustColliderHeight(this.gridSize));
+    heightRow.append(heightLabel, hMinus, this.heightValueEl, hPlus);
 
-      const container = this.add.container(0, 0, [frameRect, icon, label, hitArea])
-        .setScrollFactor(0)
-        .setDepth(1003);
-      container.setMask(mask);
+    controlsSection.append(widthRow, heightRow);
+    sidebar.appendChild(controlsSection);
 
-      this.paletteItems.push({ container, frameRect, asset });
+    // Asset grid (scrollable)
+    const listContainer = this.el('div', 'flex-1 overflow-y-auto se-scroll py-2 px-3');
+    this.buildAssetGrid(listContainer);
+    sidebar.appendChild(listContainer);
+
+    // Undo / Redo row
+    const undoRedoSection = this.el('div', 'px-4 py-2 border-t border-brd/60 flex gap-2');
+
+    this.undoBtn = this.el('button', [
+      'flex-1 h-8 rounded font-sans text-xs font-medium',
+      'bg-panel-button border border-brd text-txt-muted',
+      'hover:bg-brd-bright hover:border-brd-bright transition-colors',
+      'disabled:opacity-30 disabled:pointer-events-none',
+    ].join(' ')) as HTMLButtonElement;
+    this.undoBtn.textContent = 'UNDO';
+    this.undoBtn.disabled = true;
+    this.undoBtn.addEventListener('click', () => this.undo());
+
+    this.redoBtn = this.el('button', [
+      'flex-1 h-8 rounded font-sans text-xs font-medium',
+      'bg-panel-button border border-brd text-txt-muted',
+      'hover:bg-brd-bright hover:border-brd-bright transition-colors',
+      'disabled:opacity-30 disabled:pointer-events-none',
+    ].join(' ')) as HTMLButtonElement;
+    this.redoBtn.textContent = 'REDO';
+    this.redoBtn.disabled = true;
+    this.redoBtn.addEventListener('click', () => this.redo());
+
+    undoRedoSection.append(this.undoBtn, this.redoBtn);
+    sidebar.appendChild(undoRedoSection);
+
+    // Action buttons
+    const actionsSection = this.el('div', 'px-4 py-2 border-t border-brd/60 flex gap-2');
+
+    const deleteBtn = this.el('button', [
+      'flex-1 h-8 rounded font-sans text-xs font-medium',
+      'bg-danger border border-accent/30 text-accent',
+      'hover:bg-danger/80 hover:border-accent/50 transition-colors',
+    ].join(' ')) as HTMLButtonElement;
+    deleteBtn.textContent = 'DELETE';
+    deleteBtn.addEventListener('click', () => this.deleteSelectedTile());
+
+    const exitBtn = this.el('button', [
+      'flex-1 h-8 rounded font-sans text-xs font-medium',
+      'bg-success-dark border border-success/40 text-success',
+      'hover:bg-success/20 hover:border-success/60 transition-colors',
+    ].join(' ')) as HTMLButtonElement;
+    exitBtn.textContent = 'EXIT';
+    exitBtn.addEventListener('click', () => this.exitToGame());
+
+    actionsSection.append(deleteBtn, exitBtn);
+    sidebar.appendChild(actionsSection);
+
+    // Help text
+    const helpSection = this.el('div', 'px-4 py-2 border-t border-brd/40');
+    const helpText = this.el('p', 'text-[10px] text-txt-muted leading-relaxed');
+    helpText.textContent = 'Click tile to select, click canvas to place. WASD to pan. Click placed tiles to select/drag. DEL to delete. Ctrl+Z undo, Ctrl+Shift+Z redo. ESC to exit.';
+    helpSection.appendChild(helpText);
+    sidebar.appendChild(helpSection);
+
+    this.uiRoot.appendChild(sidebar);
+    document.body.appendChild(this.uiRoot);
+  }
+
+  private el<K extends keyof HTMLElementTagNameMap = 'div'>(
+    tag: K, className: string
+  ): HTMLElementTagNameMap[K] {
+    const e = document.createElement(tag);
+    if (className) e.className = className;
+    return e;
+  }
+
+  private createCtrlBtn(label: string, onClick: () => void): HTMLButtonElement {
+    const btn = this.el('button', [
+      'w-6 h-6 flex items-center justify-center rounded',
+      'bg-panel-button border border-brd text-txt-primary text-xs',
+      'hover:bg-brd-bright hover:border-brd-bright transition-colors select-none',
+    ].join(' ')) as HTMLButtonElement;
+    btn.textContent = label;
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  private buildAssetGrid(container: HTMLElement): void {
+    // Group assets by texture
+    const groups = new Map<string, { label: string; assets: BuilderAssetDefinition[] }>();
+
+    for (const asset of BUILDER_ASSETS) {
+      const groupKey = asset.texture;
+      if (!groups.has(groupKey)) {
+        // Derive group label from asset label (strip trailing number)
+        const groupLabel = asset.label.replace(/\s*\d+$/, '').toUpperCase() || asset.label.toUpperCase();
+        groups.set(groupKey, { label: groupLabel, assets: [] });
+      }
+      groups.get(groupKey)!.assets.push(asset);
+    }
+
+    for (const [, group] of groups) {
+      const section = this.el('div', 'mb-3');
+
+      const header = this.el('span', 'text-[10px] font-mono text-txt-muted tracking-wider');
+      header.textContent = group.label;
+      section.appendChild(header);
+
+      const grid = this.el('div', 'flex flex-wrap gap-1 mt-1');
+
+      for (const asset of group.assets) {
+        const item = this.el('div', [
+          'w-9 h-9 flex items-center justify-center rounded cursor-pointer',
+          'transition-all duration-150 select-none overflow-hidden',
+          asset.id === this.selectedAsset.id
+            ? 'border-2 border-accent'
+            : 'border border-brd hover:border-accent/60',
+        ].join(' '));
+        item.dataset.assetId = asset.id;
+        item.title = asset.label;
+
+        const thumb = this.createTileThumb(asset, 32);
+        item.appendChild(thumb);
+
+        item.addEventListener('click', () => this.selectAsset(asset));
+        grid.appendChild(item);
+        this.assetItems.push(item);
+      }
+
+      section.appendChild(grid);
+      container.appendChild(section);
+    }
+  }
+
+  private createTileThumb(asset: BuilderAssetDefinition, size: number): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    canvas.style.imageRendering = 'pixelated';
+
+    const frame = this.textures.getFrame(asset.texture, asset.frame ?? 0);
+    const ctx = canvas.getContext('2d')!;
+    const src = frame.source.image as HTMLImageElement;
+
+    const scale = Math.min(size / frame.cutWidth, size / frame.cutHeight);
+    const dw = frame.cutWidth * scale;
+    const dh = frame.cutHeight * scale;
+
+    ctx.drawImage(
+      src,
+      frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight,
+      (size - dw) / 2, (size - dh) / 2, dw, dh
+    );
+
+    return canvas;
+  }
+
+  private updateAssetListHighlight(): void {
+    this.assetItems.forEach((item) => {
+      const isActive = item.dataset.assetId === this.selectedAsset.id;
+      item.className = [
+        'w-9 h-9 flex items-center justify-center rounded cursor-pointer',
+        'transition-all duration-150 select-none overflow-hidden',
+        isActive
+          ? 'border-2 border-accent'
+          : 'border border-brd hover:border-accent/60',
+      ].join(' ');
     });
-
-    const rows = Math.ceil(BUILDER_ASSETS.length / columns);
-    this.paletteContentHeight = startY + rows * (this.iconSize + 34);
-    this.layoutPaletteItems();
-    this.updatePaletteSelection();
   }
 
-  private createHud(): void {
-    this.add.text(16, 16, 'Level Builder', {
-      fontSize: '22px',
-      color: '#f0f4f8',
-    }).setScrollFactor(0).setDepth(1100);
+  /* ------------------------------------------------------------------ */
+  /*  Placement preview                                                  */
+  /* ------------------------------------------------------------------ */
 
-    this.hudTexts = {
-      selected: this.add.text(16, 48, '', {
-        fontSize: '12px',
-        color: '#bcccdc',
-      }).setScrollFactor(0).setDepth(1100),
-      collider: this.add.text(16, 72, '', {
-        fontSize: '12px',
-        color: '#bcccdc',
-      }).setScrollFactor(0).setDepth(1100),
-      help: this.add.text(16, 96, '', {
-        fontSize: '12px',
-        color: '#829ab1',
-        wordWrap: { width: this.paletteWidth - 32 },
-      }).setScrollFactor(0).setDepth(1100),
-    };
+  private createPlacementPreview(): void {
+    this.placementPreview = this.add.image(0, 0, this.selectedAsset.texture, this.selectedAsset.frame)
+      .setScale(this.selectedAsset.scale)
+      .setAlpha(0.45)
+      .setDepth(900);
 
-    this.createActionButton(16, 140, '-W', 48, () => this.adjustColliderWidth(-this.gridSize), 0x243b53);
-    this.createActionButton(72, 140, '+W', 48, () => this.adjustColliderWidth(this.gridSize), 0x243b53);
-    this.createActionButton(128, 140, '-H', 48, () => this.adjustColliderHeight(-this.gridSize), 0x243b53);
-    this.createActionButton(184, 140, '+H', 48, () => this.adjustColliderHeight(this.gridSize), 0x243b53);
-    this.createActionButton(16, 440, 'Delete', 96, () => this.deleteSelectedTile(), 0x742a2a);
-    this.createActionButton(120, 440, 'Exit', 96, () => this.exitToGame(), 0x22543d);
+    this.placementPreviewCollider = this.add.rectangle(0, 0, this.colliderWidth, this.colliderHeight)
+      .setStrokeStyle(2, 0x68d391, 0.7)
+      .setFillStyle(0x68d391, 0.1)
+      .setDepth(901);
   }
 
-  private createActionButton(
-    x: number,
-    y: number,
-    label: string,
-    width: number,
-    onClick: () => void,
-    color: number
-  ): void {
-    const button = this.add.rectangle(x, y, width, 24, color, 1)
-      .setOrigin(0, 0)
-      .setScrollFactor(0)
-      .setDepth(1100)
-      .setStrokeStyle(1, 0x486581, 1)
-      .setInteractive({ useHandCursor: true });
-    button.on('pointerdown', onClick);
+  private refreshPlacementPreview(): void {
+    if (!this.placementPreview || !this.placementPreviewCollider) return;
 
-    this.add.text(x + width / 2, y + 12, label, {
-      fontSize: '11px',
-      color: '#f0f4f8',
-    })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(1101);
+    this.placementPreview.setTexture(this.selectedAsset.texture, this.selectedAsset.frame);
+    this.placementPreview.setScale(this.selectedAsset.scale);
+    this.placementPreviewCollider.setDisplaySize(this.colliderWidth, this.colliderHeight);
   }
+
+  /* ------------------------------------------------------------------ */
+  /*  Input                                                              */
+  /* ------------------------------------------------------------------ */
 
   private registerInput(): void {
     this.cameraKeys = this.input.keyboard?.addKeys({
@@ -273,52 +420,97 @@ export class LevelBuilderScene extends Phaser.Scene {
       this.deleteSelectedTile();
     });
 
-    this.input.on(
-      'wheel',
-      (pointer: Phaser.Input.Pointer, _objects: Phaser.GameObjects.GameObject[], _dx: number, dy: number) => {
-        if (pointer.x > this.paletteWidth || pointer.y < this.paletteTop) {
-          return;
-        }
+    // Undo / Redo shortcuts (Ctrl+Z / Ctrl+Shift+Z)
+    this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.Z).on('down', () => {
+      const ctrl = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.CTRL, false, false);
+      const meta = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ALT, false, false);
+      if (!ctrl.isDown && !meta.isDown) return;
+      const shift = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT, false, false);
+      if (shift.isDown) {
+        this.redo();
+      } else {
+        this.undo();
+      }
+    });
 
-        const viewportHeight = this.scale.height - this.paletteTop;
-        const maxScroll = Math.max(0, this.paletteContentHeight - viewportHeight - 16);
-        this.paletteScrollY = Phaser.Math.Clamp(this.paletteScrollY + dy * 0.5, 0, maxScroll);
-        this.layoutPaletteItems();
+    // Trackpad / mouse wheel to scroll the camera (both axes)
+    this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _over: Phaser.GameObjects.GameObject[], dx: number, dy: number) => {
+      const cam = this.cameras.main;
+      cam.scrollX = Phaser.Math.Clamp(cam.scrollX + dx, 0, this.level.WORLD_WIDTH - cam.width);
+      cam.scrollY = Phaser.Math.Clamp(cam.scrollY + dy, 0, this.level.WORLD_HEIGHT - cam.height);
+    });
+
+    // Click on canvas to place a tile (only if no interactive object was clicked)
+    this.input.on(
+      'pointerdown',
+      (pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
+        if (currentlyOver.length > 0) return;
+        this.isPainting = true;
+        this.paintBatchTileIds = [];
+        const point = this.getSnappedPoint(pointer);
+        this.lastDragPlaceKey = `${point.x},${point.y}`;
+        this.placeAsset(this.selectedAsset, point.x, point.y);
       }
     );
 
-    this.input.on('dragstart', (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
-      const asset = gameObject.getData('asset') as BuilderAssetDefinition | undefined;
-      if (!asset) {
-        return;
-      }
-
-      this.selectAsset(asset);
-      this.dragPreview = this.add.image(0, 0, asset.texture, asset.frame)
-        .setScale(asset.scale)
-        .setAlpha(0.85)
-        .setDepth(900);
-      this.dragPreviewCollider = this.add.rectangle(0, 0, this.colliderWidth, this.colliderHeight)
-        .setStrokeStyle(2, 0x68d391, 0.9)
-        .setFillStyle(0x68d391, 0.12)
-        .setDepth(901);
+    // Drag while holding mouse to continuously place tiles
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (!pointer.isDown || !this.isPainting) return;
+      const point = this.getSnappedPoint(pointer);
+      const key = `${point.x},${point.y}`;
+      if (key === this.lastDragPlaceKey) return;
+      this.lastDragPlaceKey = key;
+      this.placeAsset(this.selectedAsset, point.x, point.y);
     });
 
-    this.input.on('drag', (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
-      const paletteAsset = gameObject.getData('asset') as BuilderAssetDefinition | undefined;
-      if (paletteAsset && this.dragPreview && this.dragPreviewCollider) {
-        const point = this.getSnappedPoint(pointer);
-        this.dragPreview.setPosition(point.x, point.y);
-        this.dragPreviewCollider.setPosition(point.x, point.y);
-        return;
+    this.input.on('pointerup', () => {
+      // Flush paint batch as a single undo action
+      if (this.isPainting && this.paintBatchTileIds.length > 0) {
+        const batchIds = [...this.paintBatchTileIds];
+        const snapshots = batchIds.map((id) => {
+          const pa = this.placedAssets.find((a) => a.tileId === id)!;
+          return {
+            id,
+            assetId: pa.asset.id,
+            x: pa.sprite.x,
+            y: pa.sprite.y,
+            colliderWidth: pa.collider.displayWidth,
+            colliderHeight: pa.collider.displayHeight,
+          } as PlacedTileData;
+        });
+        this.pushAction({
+          undo: () => {
+            for (const snap of snapshots) {
+              const found = this.placedAssets.find((a) => a.tileId === snap.id);
+              if (found) this.deletePlacedAsset(found, false);
+            }
+          },
+          redo: () => {
+            for (const snap of snapshots) {
+              restoreLevelTile(snap);
+              this.placeAsset(getBuilderAssetById(snap.assetId), snap.x, snap.y, snap, false);
+            }
+          },
+        });
       }
+      this.paintBatchTileIds = [];
+      this.lastDragPlaceKey = undefined;
+      this.isPainting = false;
+    });
 
+    // Drag placed tiles to reposition — track start position
+    this.input.on('dragstart', (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
       const placedAsset = gameObject.getData('placedAsset') as PlacedAsset | undefined;
-      if (!placedAsset) {
-        return;
+      if (placedAsset) {
+        this.dragStartPos = { x: placedAsset.sprite.x, y: placedAsset.sprite.y };
       }
+    });
 
-      const point = this.getSnappedPoint(pointer);
+    this.input.on('drag', (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
+      const placedAsset = gameObject.getData('placedAsset') as PlacedAsset | undefined;
+      if (!placedAsset) return;
+
+      const point = this.getSnappedPoint(_pointer);
       placedAsset.sprite.setPosition(point.x, point.y);
       placedAsset.collider.setPosition(point.x, point.y);
       this.updateStaticBody(
@@ -330,23 +522,47 @@ export class LevelBuilderScene extends Phaser.Scene {
       updateLevelTile(placedAsset.tileId, { x: point.x, y: point.y });
     });
 
-    this.input.on('dragend', (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
-      const asset = gameObject.getData('asset') as BuilderAssetDefinition | undefined;
-      if (asset && pointer.x > this.paletteWidth) {
-        const point = this.getSnappedPoint(pointer);
-        this.placeAsset(asset, point.x, point.y);
-      }
+    this.input.on('dragend', (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
+      const placedAsset = gameObject.getData('placedAsset') as PlacedAsset | undefined;
+      if (!placedAsset || !this.dragStartPos) return;
 
-      this.dragPreview?.destroy();
-      this.dragPreviewCollider?.destroy();
-      this.dragPreview = undefined;
-      this.dragPreviewCollider = undefined;
+      const from = this.dragStartPos;
+      const to = { x: placedAsset.sprite.x, y: placedAsset.sprite.y };
+      this.dragStartPos = undefined;
+
+      if (from.x === to.x && from.y === to.y) return;
+
+      const tileId = placedAsset.tileId;
+      this.pushAction({
+        undo: () => {
+          const found = this.placedAssets.find((a) => a.tileId === tileId);
+          if (!found) return;
+          found.sprite.setPosition(from.x, from.y);
+          found.collider.setPosition(from.x, from.y);
+          this.updateStaticBody(found.sprite, found.collider.displayWidth, found.collider.displayHeight);
+          this.layoutDeleteButton(found);
+          updateLevelTile(tileId, { x: from.x, y: from.y });
+        },
+        redo: () => {
+          const found = this.placedAssets.find((a) => a.tileId === tileId);
+          if (!found) return;
+          found.sprite.setPosition(to.x, to.y);
+          found.collider.setPosition(to.x, to.y);
+          this.updateStaticBody(found.sprite, found.collider.displayWidth, found.collider.displayHeight);
+          this.layoutDeleteButton(found);
+          updateLevelTile(tileId, { x: to.x, y: to.y });
+        },
+      });
     });
   }
 
+  /* ------------------------------------------------------------------ */
+  /*  Tile management                                                    */
+  /* ------------------------------------------------------------------ */
+
   private loadPlacedTiles(): void {
     getLevelTiles().forEach((tile) => {
-      this.placeAsset(getBuilderAssetById(tile.assetId), tile.x, tile.y, tile);
+      this.placeAsset(getBuilderAssetById(tile.assetId), tile.x, tile.y, tile, false);
     });
   }
 
@@ -354,7 +570,8 @@ export class LevelBuilderScene extends Phaser.Scene {
     asset: BuilderAssetDefinition,
     x: number,
     y: number,
-    existingTile?: PlacedTileData
+    existingTile?: PlacedTileData,
+    recordAction = true
   ): void {
     const tileData = existingTile ?? createLevelTile({
       assetId: asset.id,
@@ -399,22 +616,53 @@ export class LevelBuilderScene extends Phaser.Scene {
     this.placedAssets.push(placedAsset);
     this.selectedPlacedAsset = placedAsset;
     this.refreshPlacedHighlights();
+
+    if (recordAction && !this.isPainting) {
+      // Single-click place: push immediately
+      const tileId = tileData.id;
+      this.pushAction({
+        undo: () => {
+          const found = this.placedAssets.find((a) => a.tileId === tileId);
+          if (found) this.deletePlacedAsset(found, false);
+        },
+        redo: () => {
+          restoreLevelTile(tileData);
+          this.placeAsset(asset, tileData.x, tileData.y, tileData, false);
+        },
+      });
+    } else if (recordAction && this.isPainting) {
+      // Painting: collect tile IDs, batch action pushed on pointerup
+      this.paintBatchTileIds.push(tileData.id);
+    }
   }
 
   private createDeleteButton(): Phaser.GameObjects.Container {
-    const background = this.add.circle(0, 0, 10, 0x9b2c2c, 1)
+    const background = this.add.circle(0, 0, 12, 0x9b2c2c, 1)
       .setStrokeStyle(2, 0xfbd38d, 1);
-    const label = this.add.text(0, -1, 'x', {
-      fontSize: '12px',
+    const label = this.add.text(0, -1, '\u2715', {
+      fontSize: '13px',
+      fontStyle: 'bold',
       color: '#fff5f5',
     }).setOrigin(0.5);
 
     const button = this.add.container(0, 0, [background, label])
-      .setDepth(12)
-      .setSize(20, 20)
-      .setInteractive(new Phaser.Geom.Circle(0, 0, 10), Phaser.Geom.Circle.Contains);
+      .setDepth(999)
+      .setSize(24, 24)
+      .setInteractive(new Phaser.Geom.Circle(0, 0, 14), Phaser.Geom.Circle.Contains);
 
-    button.on('pointerdown', () => {
+    button.on('pointerover', () => {
+      background.setFillStyle(0xc53030, 1);
+      background.setScale(1.15);
+      label.setScale(1.15);
+    });
+    button.on('pointerout', () => {
+      background.setFillStyle(0x9b2c2c, 1);
+      background.setScale(1);
+      label.setScale(1);
+    });
+
+    button.on('pointerdown', (_pointer: Phaser.Input.Pointer, _localX: number, _localY: number, event: Phaser.Types.Input.EventData) => {
+      event.stopPropagation();
       const placedAsset = this.placedAssets.find((item) => item.deleteButton === button);
       if (placedAsset) {
         this.deletePlacedAsset(placedAsset);
@@ -435,78 +683,99 @@ export class LevelBuilderScene extends Phaser.Scene {
     body.position.y = sprite.y - colliderHeight / 2;
   }
 
+  /* ------------------------------------------------------------------ */
+  /*  Selection & controls                                               */
+  /* ------------------------------------------------------------------ */
+
   private selectAsset(asset: BuilderAssetDefinition): void {
     this.selectedAsset = asset;
     this.colliderWidth = asset.defaultColliderWidth;
     this.colliderHeight = asset.defaultColliderHeight;
     this.selectedPlacedAsset = undefined;
-    this.updatePaletteSelection();
+    this.updateAssetListHighlight();
     this.refreshPlacedHighlights();
     this.refreshHud();
+    this.refreshPlacementPreview();
   }
 
   private syncColliderControlsFromPlacedAsset(placedAsset: PlacedAsset): void {
     this.selectedAsset = placedAsset.asset;
     this.colliderWidth = placedAsset.collider.displayWidth;
     this.colliderHeight = placedAsset.collider.displayHeight;
-    this.updatePaletteSelection();
+    this.updateAssetListHighlight();
     this.refreshHud();
+    this.refreshPlacementPreview();
   }
 
   private adjustColliderWidth(amount: number): void {
+    const oldWidth = this.colliderWidth;
     this.colliderWidth = Math.max(this.gridSize, this.colliderWidth + amount);
+    const newWidth = this.colliderWidth;
     if (this.selectedPlacedAsset) {
-      this.selectedPlacedAsset.collider.setSize(this.colliderWidth, this.selectedPlacedAsset.collider.displayHeight);
-      this.selectedPlacedAsset.collider.setDisplaySize(
-        this.colliderWidth,
-        this.selectedPlacedAsset.collider.displayHeight
-      );
-      this.updateStaticBody(
-        this.selectedPlacedAsset.sprite,
-        this.selectedPlacedAsset.collider.displayWidth,
-        this.selectedPlacedAsset.collider.displayHeight
-      );
-      this.layoutDeleteButton(this.selectedPlacedAsset);
-      updateLevelTile(this.selectedPlacedAsset.tileId, {
-        colliderWidth: this.selectedPlacedAsset.collider.displayWidth,
+      const tileId = this.selectedPlacedAsset.tileId;
+      this.applyColliderSize(this.selectedPlacedAsset, newWidth, this.selectedPlacedAsset.collider.displayHeight);
+      this.pushAction({
+        undo: () => {
+          this.colliderWidth = oldWidth;
+          const found = this.placedAssets.find((a) => a.tileId === tileId);
+          if (found) this.applyColliderSize(found, oldWidth, found.collider.displayHeight);
+          this.refreshHud();
+          this.refreshPlacementPreview();
+        },
+        redo: () => {
+          this.colliderWidth = newWidth;
+          const found = this.placedAssets.find((a) => a.tileId === tileId);
+          if (found) this.applyColliderSize(found, newWidth, found.collider.displayHeight);
+          this.refreshHud();
+          this.refreshPlacementPreview();
+        },
       });
     }
     this.refreshHud();
+    this.refreshPlacementPreview();
   }
 
   private adjustColliderHeight(amount: number): void {
+    const oldHeight = this.colliderHeight;
     this.colliderHeight = Math.max(this.gridSize, this.colliderHeight + amount);
+    const newHeight = this.colliderHeight;
     if (this.selectedPlacedAsset) {
-      this.selectedPlacedAsset.collider.setSize(this.selectedPlacedAsset.collider.displayWidth, this.colliderHeight);
-      this.selectedPlacedAsset.collider.setDisplaySize(
-        this.selectedPlacedAsset.collider.displayWidth,
-        this.colliderHeight
-      );
-      this.updateStaticBody(
-        this.selectedPlacedAsset.sprite,
-        this.selectedPlacedAsset.collider.displayWidth,
-        this.selectedPlacedAsset.collider.displayHeight
-      );
-      this.layoutDeleteButton(this.selectedPlacedAsset);
-      updateLevelTile(this.selectedPlacedAsset.tileId, {
-        colliderHeight: this.selectedPlacedAsset.collider.displayHeight,
+      const tileId = this.selectedPlacedAsset.tileId;
+      this.applyColliderSize(this.selectedPlacedAsset, this.selectedPlacedAsset.collider.displayWidth, newHeight);
+      this.pushAction({
+        undo: () => {
+          this.colliderHeight = oldHeight;
+          const found = this.placedAssets.find((a) => a.tileId === tileId);
+          if (found) this.applyColliderSize(found, found.collider.displayWidth, oldHeight);
+          this.refreshHud();
+          this.refreshPlacementPreview();
+        },
+        redo: () => {
+          this.colliderHeight = newHeight;
+          const found = this.placedAssets.find((a) => a.tileId === tileId);
+          if (found) this.applyColliderSize(found, found.collider.displayWidth, newHeight);
+          this.refreshHud();
+          this.refreshPlacementPreview();
+        },
       });
     }
     this.refreshHud();
+    this.refreshPlacementPreview();
+  }
+
+  private applyColliderSize(placedAsset: PlacedAsset, w: number, h: number): void {
+    placedAsset.collider.setSize(w, h);
+    placedAsset.collider.setDisplaySize(w, h);
+    this.updateStaticBody(placedAsset.sprite, w, h);
+    this.layoutDeleteButton(placedAsset);
+    updateLevelTile(placedAsset.tileId, { colliderWidth: w, colliderHeight: h });
   }
 
   private refreshHud(): void {
-    this.hudTexts.selected.setText(`Selected: ${this.selectedAsset.label}`);
-    this.hudTexts.collider.setText(`Collider: ${this.colliderWidth} x ${this.colliderHeight}`);
-    this.hudTexts.help.setText(
-      'Drag palette tiles into the world. Drag placed tiles to reposition them. Delete removes the selected tile. Exit auto-saves and returns to the game.'
-    );
-  }
-
-  private updatePaletteSelection(): void {
-    this.paletteItems.forEach(({ frameRect, asset }) => {
-      frameRect.setStrokeStyle(2, asset.id === this.selectedAsset.id ? 0xf6ad55 : 0x314355, 1);
-    });
+    this.selectedLabel.textContent = this.selectedAsset.label;
+    this.colliderLabel.textContent = `${this.colliderWidth} x ${this.colliderHeight}`;
+    this.widthValueEl.textContent = String(this.colliderWidth);
+    this.heightValueEl.textContent = String(this.colliderHeight);
   }
 
   private refreshPlacedHighlights(): void {
@@ -525,13 +794,57 @@ export class LevelBuilderScene extends Phaser.Scene {
     );
   }
 
+  /* ------------------------------------------------------------------ */
+  /*  Undo / Redo                                                        */
+  /* ------------------------------------------------------------------ */
+
+  private pushAction(action: UndoAction): void {
+    this.undoStack.push(action);
+    this.redoStack.length = 0;
+    this.refreshUndoRedoButtons();
+  }
+
+  private undo(): void {
+    const action = this.undoStack.pop();
+    if (!action) return;
+    action.undo();
+    this.redoStack.push(action);
+    this.refreshUndoRedoButtons();
+  }
+
+  private redo(): void {
+    const action = this.redoStack.pop();
+    if (!action) return;
+    action.redo();
+    this.undoStack.push(action);
+    this.refreshUndoRedoButtons();
+  }
+
+  private refreshUndoRedoButtons(): void {
+    this.undoBtn.disabled = this.undoStack.length === 0;
+    this.redoBtn.disabled = this.redoStack.length === 0;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Delete & exit                                                      */
+  /* ------------------------------------------------------------------ */
+
   private deleteSelectedTile(): void {
     if (this.selectedPlacedAsset) {
       this.deletePlacedAsset(this.selectedPlacedAsset);
     }
   }
 
-  private deletePlacedAsset(placedAsset: PlacedAsset): void {
+  private deletePlacedAsset(placedAsset: PlacedAsset, recordAction = true): void {
+    const snapshot: PlacedTileData = {
+      id: placedAsset.tileId,
+      assetId: placedAsset.asset.id,
+      x: placedAsset.sprite.x,
+      y: placedAsset.sprite.y,
+      colliderWidth: placedAsset.collider.displayWidth,
+      colliderHeight: placedAsset.collider.displayHeight,
+    };
+
     deleteLevelTile(placedAsset.tileId);
     placedAsset.sprite.destroy();
     placedAsset.collider.destroy();
@@ -542,18 +855,24 @@ export class LevelBuilderScene extends Phaser.Scene {
       this.selectedPlacedAsset = undefined;
     }
 
-    this.refreshHud();
     this.refreshPlacedHighlights();
+
+    if (recordAction) {
+      this.pushAction({
+        undo: () => {
+          restoreLevelTile(snapshot);
+          this.placeAsset(getBuilderAssetById(snapshot.assetId), snapshot.x, snapshot.y, snapshot, false);
+        },
+        redo: () => {
+          const found = this.placedAssets.find((a) => a.tileId === snapshot.id);
+          if (found) this.deletePlacedAsset(found, false);
+        },
+      });
+    }
   }
 
   private exitToGame(): void {
     this.scene.start('Game');
-  }
-
-  private layoutPaletteItems(): void {
-    this.paletteItems.forEach(({ container }) => {
-      container.y = -this.paletteScrollY;
-    });
   }
 
   private getSnappedPoint(pointer: Phaser.Input.Pointer): { x: number; y: number } {

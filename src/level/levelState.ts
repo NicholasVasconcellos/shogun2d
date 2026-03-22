@@ -45,3 +45,7 @@ export const updateLevelTile = (
 export const deleteLevelTile = (id: string): void => {
   levelState.tiles = levelState.tiles.filter((tile) => tile.id !== id);
 };
+
+export const restoreLevelTile = (tile: PlacedTileData): void => {
+  levelState.tiles = [...levelState.tiles, { ...tile }];
+};
