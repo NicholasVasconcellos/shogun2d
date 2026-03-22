@@ -50,8 +50,25 @@ export class LevelBuilderScene extends Phaser.Scene {
   private cameraKeys?: Record<string, Phaser.Input.Keyboard.Key>;
   private placedAssets: PlacedAsset[] = [];
 
+  private playerX?: number;
+  private playerY?: number;
+  private playerFlipX?: boolean;
+  private playerAnim?: string;
+
   constructor() {
     super({ key: 'LevelBuilder' });
+  }
+
+  init(data: {
+    playerX?: number;
+    playerY?: number;
+    playerFlipX?: boolean;
+    playerAnim?: string;
+  }): void {
+    this.playerX = data.playerX;
+    this.playerY = data.playerY;
+    this.playerFlipX = data.playerFlipX;
+    this.playerAnim = data.playerAnim;
   }
 
   create(): void {
@@ -60,6 +77,24 @@ export class LevelBuilderScene extends Phaser.Scene {
 
     this.cameras.main.setBounds(0, 0, this.level.WORLD_WIDTH, this.level.WORLD_HEIGHT);
     this.cameras.main.setZoom(1);
+
+    // Show player sprite if position was passed
+    if (this.playerX !== undefined && this.playerY !== undefined) {
+      const playerSprite = this.add.sprite(this.playerX, this.playerY, 'samurai-idle')
+        .setScale(2)
+        .setDepth(100)
+        .setAlpha(0.7); // Slightly faded to show it's "fixed" and not active
+
+      if (this.playerFlipX !== undefined) {
+        playerSprite.setFlipX(this.playerFlipX);
+      }
+
+      if (this.playerAnim) {
+        playerSprite.play(this.playerAnim);
+      } else {
+        playerSprite.play('player-idle');
+      }
+    }
 
     this.createPalette();
     this.createHud();
