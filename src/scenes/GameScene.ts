@@ -10,6 +10,9 @@ export class GameScene extends Phaser.Scene {
   private devPanel!: DevPanel;
   private level!: LevelBuilder;
   private devMode = true;
+  private showColliderOverlays = false;
+  private colliderOverlays: Phaser.GameObjects.Rectangle[] = [];
+  private playerColliderOverlay?: Phaser.GameObjects.Rectangle;
 
   constructor() {
     super({ key: 'Game' });
@@ -25,6 +28,16 @@ export class GameScene extends Phaser.Scene {
     const spawnX = 160;
     const spawnY = 160;
     this.player = new PlayerController(this, spawnX, spawnY);
+    if (this.devMode) {
+      this.playerColliderOverlay = this.createColliderOverlay(
+        this.player.sprite.x,
+        this.player.sprite.y,
+        this.getPlayerBody().width,
+        this.getPlayerBody().height,
+        this.player.sprite.depth + 1
+      );
+      this.updateColliderOverlayPositions();
+    }
 
     // Collisions
     this.physics.add.collider(this.player.sprite, this.level.platforms);
@@ -41,17 +54,17 @@ export class GameScene extends Phaser.Scene {
     if (this.devMode) {
       this.devPanel = new DevPanel(this.player, () => {
         this.scene.start('LevelBuilder');
+      }, {
+        viewColliders: this.showColliderOverlays,
+        onViewCollidersChange: (enabled) => this.setColliderOverlayVisibility(enabled),
       });
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        this.destroyColliderOverlays();
         this.devPanel.destroy();
       });
 
-      // Toggle physics debug with F2
       this.input.keyboard?.addKey('F2').on('down', () => {
-        this.physics.world.drawDebug = !this.physics.world.drawDebug;
-        if (!this.physics.world.drawDebug) {
-          this.physics.world.debugGraphic?.clear();
-        }
+        this.setColliderOverlayVisibility(!this.showColliderOverlays);
       });
     }
 
@@ -76,6 +89,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.devMode) {
+      this.updateColliderOverlayPositions();
       this.devPanel.update();
     }
   }
@@ -83,7 +97,7 @@ export class GameScene extends Phaser.Scene {
   private buildPlacedTiles(): void {
     getLevelTiles().forEach((tile) => {
       const asset = getBuilderAssetById(tile.assetId);
-      this.add.image(tile.x, tile.y, asset.texture, asset.frame)
+      const sprite = this.add.image(tile.x, tile.y, asset.texture, asset.frame)
         .setScale(asset.scale)
         .setDepth(10);
 
@@ -92,6 +106,53 @@ export class GameScene extends Phaser.Scene {
       const body = physicsSprite.body as Phaser.Physics.Arcade.StaticBody;
       body.setSize(tile.colliderWidth, tile.colliderHeight);
       body.setOffset(-tile.colliderWidth / 2, -tile.colliderHeight / 2);
+
+      if (this.devMode) {
+        const overlay = this.createColliderOverlay(tile.x, tile.y, tile.colliderWidth, tile.colliderHeight, sprite.depth + 1);
+        this.colliderOverlays.push(overlay);
+      }
     });
+  }
+
+  private createColliderOverlay(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    depth: number
+  ): Phaser.GameObjects.Rectangle {
+    return this.add.rectangle(x, y, width, height, 0x19c37d, 0.18)
+      .setStrokeStyle(2, 0x19c37d, 1)
+      .setDepth(depth)
+      .setVisible(this.showColliderOverlays);
+  }
+
+  private updateColliderOverlayPositions(): void {
+    const playerBody = this.getPlayerBody();
+    if (!this.playerColliderOverlay) {
+      return;
+    }
+
+    this.playerColliderOverlay.setPosition(playerBody.center.x, playerBody.center.y);
+    this.playerColliderOverlay.setSize(playerBody.width, playerBody.height);
+    this.playerColliderOverlay.setDisplaySize(playerBody.width, playerBody.height);
+  }
+
+  private getPlayerBody(): Phaser.Physics.Arcade.Body {
+    return this.player.sprite.body as Phaser.Physics.Arcade.Body;
+  }
+
+  private setColliderOverlayVisibility(enabled: boolean): void {
+    this.showColliderOverlays = enabled;
+    this.colliderOverlays.forEach((overlay) => overlay.setVisible(enabled));
+    this.playerColliderOverlay?.setVisible(enabled);
+    this.devPanel?.setViewCollidersEnabled(enabled);
+  }
+
+  private destroyColliderOverlays(): void {
+    this.colliderOverlays.forEach((overlay) => overlay.destroy());
+    this.colliderOverlays = [];
+    this.playerColliderOverlay?.destroy();
+    this.playerColliderOverlay = undefined;
   }
 }

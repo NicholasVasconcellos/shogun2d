@@ -10,10 +10,18 @@ export class DevPanel {
   private posText: HTMLSpanElement;
   private velText: HTMLSpanElement;
   private stateText: HTMLSpanElement;
+  private viewCollidersInput?: HTMLInputElement;
   private inputMap: Map<string, HTMLInputElement> = new Map();
   private valueMap: Map<string, HTMLSpanElement> = new Map();
 
-  constructor(player: PlayerController, openLevelBuilder: () => void) {
+  constructor(
+    player: PlayerController,
+    openLevelBuilder: () => void,
+    options?: {
+      viewColliders?: boolean;
+      onViewCollidersChange?: (enabled: boolean) => void;
+    }
+  ) {
     this.player = player;
     this.openLevelBuilder = openLevelBuilder;
     this.fields = player.getSerializedFields();
@@ -108,6 +116,12 @@ export class DevPanel {
     this.posText = this.createInfoLine(infoBlock, 'Position');
     this.velText = this.createInfoLine(infoBlock, 'Velocity');
     this.stateText = this.createInfoLine(infoBlock, 'State');
+    this.viewCollidersInput = this.createToggleRow(
+      infoBlock,
+      'View Colliders',
+      options?.viewColliders ?? false,
+      (enabled) => options?.onViewCollidersChange?.(enabled)
+    );
 
     // Serialized field sections
     const categories = [...new Set(this.fields.map(f => f.category))];
@@ -255,6 +269,40 @@ export class DevPanel {
     parent.appendChild(row);
   }
 
+  private createToggleRow(
+    parent: HTMLDivElement,
+    labelText: string,
+    initialValue: boolean,
+    onChange: (value: boolean) => void
+  ): HTMLInputElement {
+    const row = document.createElement('label');
+    Object.assign(row.style, {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '3px 0',
+      cursor: 'pointer',
+    });
+
+    const label = document.createElement('span');
+    label.textContent = labelText;
+    label.style.color = '#888';
+
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = initialValue;
+    Object.assign(input.style, {
+      accentColor: '#19c37d',
+      cursor: 'pointer',
+    });
+    input.addEventListener('change', () => onChange(input.checked));
+
+    row.appendChild(label);
+    row.appendChild(input);
+    parent.appendChild(row);
+    return input;
+  }
+
   private formatValue(v: number, step: number): string {
     const decimals = step < 1 ? (step < 0.1 ? 2 : 1) : 0;
     return v.toFixed(decimals);
@@ -297,5 +345,11 @@ export class DevPanel {
 
   destroy(): void {
     this.container.remove();
+  }
+
+  setViewCollidersEnabled(enabled: boolean): void {
+    if (this.viewCollidersInput) {
+      this.viewCollidersInput.checked = enabled;
+    }
   }
 }
