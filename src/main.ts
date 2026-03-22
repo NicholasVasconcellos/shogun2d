@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { LevelBuilderScene } from './scenes/LevelBuilderScene';
+import { SpriteEditorScene } from './scenes/SpriteEditorScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -20,7 +21,7 @@ const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [BootScene, GameScene, LevelBuilderScene],
+  scene: [BootScene, GameScene, LevelBuilderScene, SpriteEditorScene],
   backgroundColor: '#1a1a2e',
 };
 

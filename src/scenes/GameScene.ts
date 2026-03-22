@@ -54,6 +54,8 @@ export class GameScene extends Phaser.Scene {
     if (this.devMode) {
       this.devPanel = new DevPanel(this.player, () => {
         this.scene.start('LevelBuilder');
+      }, () => {
+        this.scene.start('SpriteEditor');
       }, {
         viewColliders: this.showColliderOverlays,
         onViewCollidersChange: (enabled) => this.setColliderOverlayVisibility(enabled),
@@ -76,6 +78,10 @@ export class GameScene extends Phaser.Scene {
 
     this.input.keyboard?.addKey('F3').on('down', () => {
       this.scene.start('LevelBuilder');
+    });
+
+    this.input.keyboard?.addKey('F4').on('down', () => {
+      this.scene.start('SpriteEditor');
     });
   }
 

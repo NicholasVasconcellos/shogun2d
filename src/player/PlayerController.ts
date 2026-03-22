@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getColliderConfig } from './colliderState';
 
 /** Serialized field descriptor for the dev panel */
 export interface SerializedField {
@@ -125,8 +126,14 @@ export class PlayerController {
 
     this.sprite = scene.physics.add.sprite(x, y, 'samurai-idle');
     this.sprite.setScale(2);
-    this.sprite.setSize(24, 40);
-    this.sprite.setOffset(36, 50);
+    const collider = getColliderConfig();
+    if (collider.type === 'rectangle') {
+      this.sprite.setSize(collider.width * collider.scale, collider.height * collider.scale);
+      this.sprite.setOffset(collider.offsetX, collider.offsetY);
+    } else {
+      const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+      body.setCircle(collider.radius * collider.scale, collider.circleOffsetX, collider.circleOffsetY);
+    }
     this.sprite.setCollideWorldBounds(false);
 
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;

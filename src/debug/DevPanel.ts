@@ -4,6 +4,7 @@ export class DevPanel {
   private container: HTMLDivElement;
   private player: PlayerController;
   private openLevelBuilder: () => void;
+  private openSpriteEditor: () => void;
   private fields: SerializedField[] = [];
   private visible = true;
   private fpsText: HTMLSpanElement;
@@ -17,6 +18,7 @@ export class DevPanel {
   constructor(
     player: PlayerController,
     openLevelBuilder: () => void,
+    openSpriteEditor: () => void,
     options?: {
       viewColliders?: boolean;
       onViewCollidersChange?: (enabled: boolean) => void;
@@ -24,6 +26,7 @@ export class DevPanel {
   ) {
     this.player = player;
     this.openLevelBuilder = openLevelBuilder;
+    this.openSpriteEditor = openSpriteEditor;
     this.fields = player.getSerializedFields();
 
     // Build DOM
@@ -101,11 +104,26 @@ export class DevPanel {
       this.openLevelBuilder();
     });
 
+    const spriteEditorBtn = document.createElement('button');
+    spriteEditorBtn.textContent = '[ SPRITE EDITOR ]';
+    Object.assign(spriteEditorBtn.style, {
+      background: 'none',
+      border: '1px solid #555',
+      color: '#7fdbca',
+      cursor: 'pointer',
+      fontSize: '11px',
+      padding: '2px 6px',
+    });
+    spriteEditorBtn.addEventListener('click', () => {
+      this.openSpriteEditor();
+    });
+
     header.appendChild(title);
     const headerBtns = document.createElement('div');
     Object.assign(headerBtns.style, { display: 'flex', gap: '4px' });
     headerBtns.appendChild(docsLink);
     headerBtns.appendChild(levelBuilderBtn);
+    headerBtns.appendChild(spriteEditorBtn);
     headerBtns.appendChild(toggleBtn);
     header.appendChild(headerBtns);
     this.container.appendChild(header);
