@@ -3,6 +3,7 @@ import { PlayerController, SerializedField } from '../player/PlayerController';
 export class DevPanel {
   private container: HTMLDivElement;
   private player: PlayerController;
+  private openLevelBuilder: () => void;
   private fields: SerializedField[] = [];
   private visible = true;
   private fpsText: HTMLSpanElement;
@@ -12,8 +13,9 @@ export class DevPanel {
   private inputMap: Map<string, HTMLInputElement> = new Map();
   private valueMap: Map<string, HTMLSpanElement> = new Map();
 
-  constructor(player: PlayerController) {
+  constructor(player: PlayerController, openLevelBuilder: () => void) {
     this.player = player;
+    this.openLevelBuilder = openLevelBuilder;
     this.fields = player.getSerializedFields();
 
     // Build DOM
@@ -77,10 +79,25 @@ export class DevPanel {
       cursor: 'pointer',
     });
 
+    const levelBuilderBtn = document.createElement('button');
+    levelBuilderBtn.textContent = '[ LEVEL BUILDER ]';
+    Object.assign(levelBuilderBtn.style, {
+      background: 'none',
+      border: '1px solid #555',
+      color: '#7fdbca',
+      cursor: 'pointer',
+      fontSize: '11px',
+      padding: '2px 6px',
+    });
+    levelBuilderBtn.addEventListener('click', () => {
+      this.openLevelBuilder();
+    });
+
     header.appendChild(title);
     const headerBtns = document.createElement('div');
     Object.assign(headerBtns.style, { display: 'flex', gap: '4px' });
     headerBtns.appendChild(docsLink);
+    headerBtns.appendChild(levelBuilderBtn);
     headerBtns.appendChild(toggleBtn);
     header.appendChild(headerBtns);
     this.container.appendChild(header);

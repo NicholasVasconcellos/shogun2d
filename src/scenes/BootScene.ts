@@ -67,11 +67,23 @@ export class BootScene extends Phaser.Scene {
     // -- Tileset --
     this.load.image('tileset', 'assets/forest/tileset/Tileset.png');
     this.load.image('tileset-v2', 'assets/forest/tileset/Tileset_v2.png');
+    this.load.spritesheet('tileset-grid', 'assets/forest/tileset/Tileset.png', {
+      frameWidth: 16,
+      frameHeight: 16,
+    });
+    this.load.spritesheet('tileset-v2-grid', 'assets/forest/tileset/Tileset_v2.png', {
+      frameWidth: 16,
+      frameHeight: 16,
+    });
 
     // -- Props & decoration --
     this.load.image('trees', 'assets/forest/trees/Trees.png');
     this.load.image('objects', 'assets/forest/props/Objects.png');
     this.load.image('props', 'assets/forest/props/Props.png');
+    this.load.spritesheet('props-strip', 'assets/forest/props/Props.png', {
+      frameWidth: 32,
+      frameHeight: 32,
+    });
     this.load.spritesheet('flag', 'assets/forest/props/Flag.png', {
       frameWidth: 29,
       frameHeight: 64,
