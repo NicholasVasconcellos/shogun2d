@@ -4,10 +4,41 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Shogun 2D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            panel: { bg: '#11151c', surface: '#1b2530', button: '#243b53' },
+            scene: { bg: '#0d1117' },
+            brd: { DEFAULT: '#314355', bright: '#486581' },
+            accent: { DEFAULT: '#e85d04', dim: '#a34003' },
+            txt: { primary: '#f0f4f8', secondary: '#d9e2ec', label: '#bcccdc', muted: '#829ab1' },
+            cyan: '#7fdbca',
+            success: { DEFAULT: '#19c37d', dark: '#22543d' },
+            danger: '#742a2a',
+          },
+          fontFamily: {
+            mono: ['"IBM Plex Mono"', '"JetBrains Mono"', '"Fira Code"', 'monospace'],
+            sans: ['"DM Sans"', '"Segoe UI"', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    }
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; }
     canvas { display: block; }
+    /* Custom scrollbar for sprite editor sidebar */
+    .se-scroll::-webkit-scrollbar { width: 4px; }
+    .se-scroll::-webkit-scrollbar-track { background: transparent; }
+    .se-scroll::-webkit-scrollbar-thumb { background: #486581; border-radius: 2px; }
+    .se-scroll::-webkit-scrollbar-thumb:hover { background: #e85d04; }
   </style>
 </head>
 <body>

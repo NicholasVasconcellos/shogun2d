@@ -15,34 +15,30 @@ interface SheetEntry {
 }
 
 export class SpriteEditorScene extends Phaser.Scene {
-  private readonly panelWidth = 260;
   private readonly displayScale = 3;
 
+  // Phaser canvas objects
   private spritePreview!: Phaser.GameObjects.Sprite;
   private overlay!: Phaser.GameObjects.Graphics;
   private boundsOutline!: Phaser.GameObjects.Graphics;
 
+  // State
   private config!: ColliderConfig;
   private sheets: SheetEntry[] = [];
   private currentSheet!: SheetEntry;
   private currentFrame = 0;
   private isPlaying = true;
 
-  private valueTexts: Map<string, Phaser.GameObjects.Text> = new Map();
-  private frameText!: Phaser.GameObjects.Text;
-  private playPauseText!: Phaser.GameObjects.Text;
-  private animListItems: Array<{
-    bg: Phaser.GameObjects.Rectangle;
-    entry: SheetEntry;
-  }> = [];
-
-  private rectControls: Phaser.GameObjects.GameObject[] = [];
-  private circleControls: Phaser.GameObjects.GameObject[] = [];
-
-  private listScrollY = 0;
-  private listContentHeight = 0;
-  private readonly listTop = 50;
-  private readonly listItemHeight = 26;
+  // DOM references
+  private uiRoot!: HTMLDivElement;
+  private animItems: HTMLDivElement[] = [];
+  private valueEls: Map<string, HTMLSpanElement> = new Map();
+  private frameEl!: HTMLSpanElement;
+  private playPauseBtn!: HTMLButtonElement;
+  private typeRectBtn!: HTMLButtonElement;
+  private typeCircleBtn!: HTMLButtonElement;
+  private rectParamsEl!: HTMLDivElement;
+  private circleParamsEl!: HTMLDivElement;
 
   constructor() {
     super({ key: 'SpriteEditor' });
@@ -55,14 +51,17 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.buildSheetList();
     this.currentSheet = this.sheets[0];
 
-    this.createAnimList();
+    this.buildUI();
     this.createPreview();
-    this.createControls();
-    this.createActionButtons();
     this.registerInput();
 
     this.redrawOverlay();
-    this.updateAnimListHighlight();
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.uiRoot.remove();
+      this.valueEls.clear();
+      this.animItems = [];
+    });
   }
 
   update(): void {
@@ -70,10 +69,14 @@ export class SpriteEditorScene extends Phaser.Scene {
       this.currentFrame = this.spritePreview.anims.currentFrame
         ? this.spritePreview.anims.currentFrame.index
         : 0;
-      this.frameText.setText(`Frame: ${this.currentFrame} / ${this.currentSheet.frameCount - 1}`);
+      this.frameEl.textContent = `Frame ${this.currentFrame} / ${this.currentSheet.frameCount - 1}`;
     }
     this.redrawOverlay();
   }
+
+  /* ------------------------------------------------------------------ */
+  /*  Data                                                               */
+  /* ------------------------------------------------------------------ */
 
   private buildSheetList(): void {
     const samuraiSheets: Record<string, number> = {
@@ -109,80 +112,307 @@ export class SpriteEditorScene extends Phaser.Scene {
     }
   }
 
-  private createAnimList(): void {
-    const cam = this.cameras.main;
-    const listHeight = cam.height - this.listTop - 10;
+  /* ------------------------------------------------------------------ */
+  /*  HTML UI                                                            */
+  /* ------------------------------------------------------------------ */
 
-    // Panel background
-    this.add.rectangle(0, 0, this.panelWidth, cam.height, 0x11151c, 0.94)
-      .setOrigin(0, 0)
-      .setDepth(1000)
-      .setStrokeStyle(2, 0x314355, 1);
+  private buildUI(): void {
+    // Root overlay -- covers viewport, passes clicks through to canvas
+    this.uiRoot = this.el('div', 'fixed inset-0 z-[1000] pointer-events-none font-sans');
 
-    // Title
-    this.add.text(12, 14, 'Sprite Editor', {
-      fontSize: '18px',
-      color: '#f0f4f8',
-    }).setDepth(1100);
+    // ---- LEFT SIDEBAR ----
+    const sidebar = this.el('div', [
+      'pointer-events-auto absolute left-0 top-0 bottom-0 w-[260px]',
+      'bg-panel-bg/[0.96] border-r border-brd flex flex-col',
+      'backdrop-blur-sm',
+    ].join(' '));
 
-    // Mask for scrollable list
-    const maskGraphics = this.add.graphics().setDepth(1002);
-    maskGraphics.fillStyle(0xffffff, 1);
-    maskGraphics.fillRect(0, this.listTop, this.panelWidth, listHeight);
-    const mask = maskGraphics.createGeometryMask();
+    // Sidebar header
+    const header = this.el('div', 'px-4 pt-4 pb-3 border-b border-brd/60');
+    const titleRow = this.el('div', 'flex items-center justify-between');
+    const title = this.el('span', 'font-mono font-semibold text-sm tracking-widest text-accent');
+    title.textContent = 'SPRITE EDITOR';
+    const badge = this.el('span', 'font-mono text-[10px] text-txt-muted bg-panel-surface px-2 py-0.5 rounded');
+    badge.textContent = `${this.sheets.length} sheets`;
+    titleRow.append(title, badge);
+    header.appendChild(titleRow);
+    sidebar.appendChild(header);
 
+    // Animation list
+    const listContainer = this.el('div', 'flex-1 overflow-y-auto se-scroll py-1');
     this.sheets.forEach((entry, i) => {
-      const y = this.listTop + i * this.listItemHeight;
+      const item = this.el('div', [
+        'flex items-center justify-between px-3 py-[7px] mx-1.5 rounded cursor-pointer',
+        'transition-all duration-150',
+        i === 0
+          ? 'bg-accent/90 text-white'
+          : 'text-txt-secondary hover:bg-panel-button/70',
+      ].join(' '));
+      item.dataset.index = String(i);
 
-      const bg = this.add.rectangle(0, y, this.panelWidth - 4, this.listItemHeight - 2, 0x1b2530, 1)
-        .setOrigin(0, 0)
-        .setDepth(1003)
-        .setInteractive({ useHandCursor: true });
-      bg.setMask(mask);
+      const name = this.el('span', 'text-xs font-sans font-medium truncate');
+      name.textContent = entry.key;
 
-      const label = this.add.text(10, y + 5, entry.key, {
-        fontSize: '12px',
-        color: '#d9e2ec',
-      }).setDepth(1004);
-      label.setMask(mask);
+      const info = this.el('span', 'text-[10px] font-mono text-txt-muted ml-2 shrink-0');
+      info.textContent = `${entry.frameCount}f`;
 
-      const frameCountText = this.add.text(this.panelWidth - 30, y + 5, `${entry.frameCount}f`, {
-        fontSize: '10px',
-        color: '#829ab1',
-      }).setDepth(1004);
-      frameCountText.setMask(mask);
+      if (entry.animKey) {
+        const dot = this.el('span', 'w-1.5 h-1.5 rounded-full bg-success shrink-0 mr-2');
+        item.appendChild(dot);
+      } else {
+        const dot = this.el('span', 'w-1.5 h-1.5 rounded-full bg-brd shrink-0 mr-2');
+        item.appendChild(dot);
+      }
 
-      bg.on('pointerdown', () => this.selectSheet(entry));
+      item.append(name, info);
+      item.addEventListener('click', () => this.selectSheet(entry));
+      listContainer.appendChild(item);
+      this.animItems.push(item);
+    });
+    sidebar.appendChild(listContainer);
 
-      this.animListItems.push({ bg, entry });
+    // ---- BOTTOM DOCK ----
+    const dock = this.el('div', [
+      'pointer-events-auto absolute bottom-0 right-0 left-[260px]',
+      'bg-panel-bg/[0.96] border-t border-brd backdrop-blur-sm',
+      'px-5 py-4',
+    ].join(' '));
+
+    const dockInner = this.el('div', 'flex gap-6 items-start');
+
+    // -- Col 1: Collider controls --
+    const colControls = this.el('div', 'flex-1 min-w-0');
+
+    // Type toggle
+    const typeRow = this.el('div', 'flex items-center gap-2 mb-3');
+    const typeLabel = this.el('span', 'text-xs font-sans text-txt-label mr-1');
+    typeLabel.textContent = 'Collider';
+
+    this.typeRectBtn = this.el('button', '') as HTMLButtonElement;
+    this.typeRectBtn.textContent = 'RECT';
+    this.typeRectBtn.addEventListener('click', () => {
+      this.config.type = 'rectangle';
+      this.updateTypeToggle();
+      this.updateControlVisibility();
+      this.redrawOverlay();
     });
 
-    this.listContentHeight = this.sheets.length * this.listItemHeight;
+    this.typeCircleBtn = this.el('button', '') as HTMLButtonElement;
+    this.typeCircleBtn.textContent = 'CIRCLE';
+    this.typeCircleBtn.addEventListener('click', () => {
+      this.config.type = 'circle';
+      this.updateTypeToggle();
+      this.updateControlVisibility();
+      this.redrawOverlay();
+    });
 
-    // Scroll
-    this.input.on('wheel', (pointer: Phaser.Input.Pointer, _objs: unknown[], _dx: number, dy: number) => {
-      if (pointer.x > this.panelWidth || pointer.y < this.listTop) return;
-      const maxScroll = Math.max(0, this.listContentHeight - (cam.height - this.listTop - 10));
-      this.listScrollY = Phaser.Math.Clamp(this.listScrollY + dy * 0.5, 0, maxScroll);
-      this.layoutAnimList();
+    typeRow.append(typeLabel, this.typeRectBtn, this.typeCircleBtn);
+    colControls.appendChild(typeRow);
+    this.updateTypeToggle();
+
+    // Rect params
+    this.rectParamsEl = this.el('div', 'space-y-1');
+    this.createParamRow(this.rectParamsEl, 'Width', 'width', 1, 1, 96);
+    this.createParamRow(this.rectParamsEl, 'Height', 'height', 1, 1, 96);
+    this.createParamRow(this.rectParamsEl, 'Offset X', 'offsetX', 1, 0, 96);
+    this.createParamRow(this.rectParamsEl, 'Offset Y', 'offsetY', 1, 0, 96);
+    colControls.appendChild(this.rectParamsEl);
+
+    // Circle params
+    this.circleParamsEl = this.el('div', 'space-y-1');
+    this.createParamRow(this.circleParamsEl, 'Radius', 'radius', 1, 1, 48);
+    this.createParamRow(this.circleParamsEl, 'Offset X', 'circleOffsetX', 1, 0, 96);
+    this.createParamRow(this.circleParamsEl, 'Offset Y', 'circleOffsetY', 1, 0, 96);
+    colControls.appendChild(this.circleParamsEl);
+
+    // Scale (always visible)
+    const scaleRow = this.el('div', 'mt-2 pt-2 border-t border-brd/40');
+    this.createParamRow(scaleRow, 'Scale', 'scale', 0.1, 0.1, 4, 1);
+    colControls.appendChild(scaleRow);
+
+    this.updateControlVisibility();
+
+    dockInner.appendChild(colControls);
+
+    // -- Col 2: Playback --
+    const colPlayback = this.el('div', 'flex flex-col items-center gap-2 pt-1');
+
+    const playLabel = this.el('span', 'text-[10px] font-mono text-txt-muted tracking-wider');
+    playLabel.textContent = 'PLAYBACK';
+    colPlayback.appendChild(playLabel);
+
+    const playRow = this.el('div', 'flex items-center gap-1.5');
+
+    const prevBtn = this.el('button', [
+      'w-8 h-8 flex items-center justify-center rounded',
+      'bg-panel-button border border-brd text-txt-primary text-sm',
+      'hover:bg-brd-bright hover:border-brd-bright transition-colors',
+    ].join(' ')) as HTMLButtonElement;
+    prevBtn.innerHTML = '&#9664;';
+    prevBtn.addEventListener('click', () => this.stepFrame(-1));
+
+    this.playPauseBtn = this.el('button', [
+      'w-20 h-8 flex items-center justify-center rounded',
+      'bg-panel-button border border-cyan/40 text-cyan text-xs font-mono font-medium',
+      'hover:bg-cyan/10 hover:border-cyan/60 transition-colors',
+    ].join(' ')) as HTMLButtonElement;
+    this.playPauseBtn.textContent = 'PAUSE';
+    this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
+
+    const nextBtn = this.el('button', [
+      'w-8 h-8 flex items-center justify-center rounded',
+      'bg-panel-button border border-brd text-txt-primary text-sm',
+      'hover:bg-brd-bright hover:border-brd-bright transition-colors',
+    ].join(' ')) as HTMLButtonElement;
+    nextBtn.innerHTML = '&#9654;';
+    nextBtn.addEventListener('click', () => this.stepFrame(1));
+
+    playRow.append(prevBtn, this.playPauseBtn, nextBtn);
+    colPlayback.appendChild(playRow);
+
+    this.frameEl = this.el('span', 'text-[11px] font-mono text-txt-muted') as HTMLSpanElement;
+    this.frameEl.textContent = `Frame 0 / ${this.currentSheet.frameCount - 1}`;
+    colPlayback.appendChild(this.frameEl);
+
+    dockInner.appendChild(colPlayback);
+
+    // -- Col 3: Actions --
+    const colActions = this.el('div', 'flex flex-col gap-2 ml-auto pt-1');
+
+    const applyBtn = this.el('button', [
+      'px-5 h-9 rounded font-sans text-xs font-medium',
+      'bg-success-dark border border-success/40 text-success',
+      'hover:bg-success/20 hover:border-success/60 transition-colors',
+    ].join(' ')) as HTMLButtonElement;
+    applyBtn.textContent = 'APPLY & EXIT';
+    applyBtn.addEventListener('click', () => this.applyAndExit());
+
+    const resetBtn = this.el('button', [
+      'px-5 h-8 rounded font-sans text-xs font-medium',
+      'bg-danger/80 border border-accent/30 text-accent',
+      'hover:bg-danger hover:border-accent/50 transition-colors',
+    ].join(' ')) as HTMLButtonElement;
+    resetBtn.textContent = 'RESET';
+    resetBtn.addEventListener('click', () => this.resetConfig());
+
+    const cancelBtn = this.el('button', [
+      'px-5 h-8 rounded font-sans text-xs font-medium',
+      'bg-panel-button border border-brd text-txt-primary',
+      'hover:bg-brd-bright transition-colors',
+    ].join(' ')) as HTMLButtonElement;
+    cancelBtn.textContent = 'CANCEL';
+    cancelBtn.addEventListener('click', () => this.cancel());
+
+    colActions.append(applyBtn, resetBtn, cancelBtn);
+    dockInner.appendChild(colActions);
+
+    dock.appendChild(dockInner);
+
+    // Assemble
+    this.uiRoot.append(sidebar, dock);
+    document.body.appendChild(this.uiRoot);
+  }
+
+  /** Utility: create a typed element with Tailwind classes */
+  private el<K extends keyof HTMLElementTagNameMap = 'div'>(
+    tag: K, className: string
+  ): HTMLElementTagNameMap[K] {
+    const e = document.createElement(tag);
+    if (className) e.className = className;
+    return e;
+  }
+
+  private createParamRow(
+    parent: HTMLElement, label: string, configKey: keyof ColliderConfig,
+    step: number, min: number, max: number, decimals = 0
+  ): void {
+    const row = this.el('div', 'flex items-center gap-2');
+
+    const labelEl = this.el('span', 'text-[11px] font-sans text-txt-label w-16 shrink-0');
+    labelEl.textContent = label;
+
+    const minusBtn = this.el('button', [
+      'w-6 h-6 flex items-center justify-center rounded',
+      'bg-panel-button border border-brd text-txt-primary text-xs',
+      'hover:bg-brd-bright hover:border-brd-bright transition-colors select-none',
+    ].join(' ')) as HTMLButtonElement;
+    minusBtn.textContent = '\u2212';
+    minusBtn.addEventListener('click', () => {
+      const val = Math.max(min, (this.config[configKey] as number) - step);
+      (this.config as unknown as Record<string, number>)[configKey] = Math.round(val * 100) / 100;
+      this.updateValueDisplay(configKey, decimals);
+      this.redrawOverlay();
+    });
+
+    const valueEl = this.el('span', 'text-xs font-mono text-txt-primary w-10 text-center');
+    this.valueEls.set(configKey, valueEl);
+    this.updateValueDisplay(configKey, decimals);
+
+    const plusBtn = this.el('button', [
+      'w-6 h-6 flex items-center justify-center rounded',
+      'bg-panel-button border border-brd text-txt-primary text-xs',
+      'hover:bg-brd-bright hover:border-brd-bright transition-colors select-none',
+    ].join(' ')) as HTMLButtonElement;
+    plusBtn.textContent = '+';
+    plusBtn.addEventListener('click', () => {
+      const val = Math.min(max, (this.config[configKey] as number) + step);
+      (this.config as unknown as Record<string, number>)[configKey] = Math.round(val * 100) / 100;
+      this.updateValueDisplay(configKey, decimals);
+      this.redrawOverlay();
+    });
+
+    row.append(labelEl, minusBtn, valueEl, plusBtn);
+    parent.appendChild(row);
+  }
+
+  private updateValueDisplay(configKey: keyof ColliderConfig, decimals = 0): void {
+    const el = this.valueEls.get(configKey);
+    if (el) {
+      const val = this.config[configKey] as number;
+      el.textContent = decimals > 0 ? val.toFixed(decimals) : String(val);
+    }
+  }
+
+  private updateTypeToggle(): void {
+    const activeClasses = 'px-3 py-1 rounded text-[11px] font-mono font-medium transition-colors bg-accent text-white border border-accent';
+    const inactiveClasses = 'px-3 py-1 rounded text-[11px] font-mono font-medium transition-colors bg-panel-button text-txt-muted border border-brd hover:bg-brd-bright';
+
+    this.typeRectBtn.className = this.config.type === 'rectangle' ? activeClasses : inactiveClasses;
+    this.typeCircleBtn.className = this.config.type === 'circle' ? activeClasses : inactiveClasses;
+  }
+
+  private updateControlVisibility(): void {
+    const isRect = this.config.type === 'rectangle';
+    this.rectParamsEl.classList.toggle('hidden', !isRect);
+    this.circleParamsEl.classList.toggle('hidden', isRect);
+  }
+
+  private updateAnimListHighlight(): void {
+    this.animItems.forEach((item, i) => {
+      const entry = this.sheets[i];
+      const isActive = entry.key === this.currentSheet.key;
+      // Reset classes
+      item.className = [
+        'flex items-center justify-between px-3 py-[7px] mx-1.5 rounded cursor-pointer',
+        'transition-all duration-150',
+        isActive
+          ? 'bg-accent/90 text-white'
+          : 'text-txt-secondary hover:bg-panel-button/70',
+      ].join(' ');
+
+      // Update the info span color
+      const info = item.querySelector('span:last-child') as HTMLSpanElement;
+      if (info) info.className = `text-[10px] font-mono ml-2 shrink-0 ${isActive ? 'text-white/70' : 'text-txt-muted'}`;
     });
   }
 
-  private layoutAnimList(): void {
-    this.animListItems.forEach(({ bg }, i) => {
-      const y = this.listTop + i * this.listItemHeight - this.listScrollY;
-      bg.setPosition(0, y);
-      // Move associated text objects too (they're children in rendering)
-      const label = bg.parentContainer?.list?.[1] as Phaser.GameObjects.Text | undefined;
-      if (label) label.setPosition(10, y + 5);
-    });
-    // Simpler: just offset all items by repositioning bg
-    // Text objects are independent, so we need to track them. Let's just rebuild positions.
-  }
+  /* ------------------------------------------------------------------ */
+  /*  Phaser canvas (preview + overlay)                                  */
+  /* ------------------------------------------------------------------ */
 
   private createPreview(): void {
     const cam = this.cameras.main;
-    const centerX = this.panelWidth + (cam.width - this.panelWidth) / 2;
+    const centerX = cam.width / 2;
     const centerY = cam.height * 0.45;
 
     this.spritePreview = this.add.sprite(centerX, centerY, this.sheets[0].textureKey)
@@ -193,7 +423,6 @@ export class SpriteEditorScene extends Phaser.Scene {
       this.spritePreview.play(this.sheets[0].animKey);
     }
 
-    // Graphics layers
     this.boundsOutline = this.add.graphics().setDepth(9);
     this.overlay = this.add.graphics().setDepth(11);
 
@@ -201,230 +430,63 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.add.graphics()
       .setDepth(8)
       .lineStyle(1, 0xe85d04, 0.4)
-      .lineBetween(this.panelWidth, centerY + 96 * this.displayScale / 2, cam.width, centerY + 96 * this.displayScale / 2);
+      .lineBetween(0, centerY + 96 * this.displayScale / 2, cam.width, centerY + 96 * this.displayScale / 2);
 
-    // Ground label
-    this.add.text(this.panelWidth + 8, centerY + 96 * this.displayScale / 2 + 4, 'ground level', {
+    this.add.text(8, centerY + 96 * this.displayScale / 2 + 4, 'ground level', {
       fontSize: '10px',
       color: '#e85d04',
     }).setAlpha(0.6).setDepth(8);
   }
 
-  private createControls(): void {
-    const cam = this.cameras.main;
-    const controlX = this.panelWidth + 20;
-    const controlY = cam.height * 0.75;
-    let y = controlY;
+  private redrawOverlay(): void {
+    this.overlay.clear();
+    this.boundsOutline.clear();
 
-    // ---- Collider Type Toggle ----
-    this.add.text(controlX, y, 'Collider Type:', {
-      fontSize: '12px', color: '#bcccdc',
-    }).setDepth(100);
+    const s = this.config.scale;
+    const ds = this.displayScale;
+    const sx = this.spritePreview.x;
+    const sy = this.spritePreview.y;
 
-    const rectBtn = this.createToggleButton(controlX + 110, y - 2, 'RECT', () => {
-      this.config.type = 'rectangle';
-      this.updateTypeToggle();
-      this.updateControlVisibility();
-      this.redrawOverlay();
-    });
+    const halfW = (96 * ds) / 2;
+    const halfH = (96 * ds) / 2;
+    this.boundsOutline.lineStyle(1, 0x486581, 0.5);
+    this.boundsOutline.strokeRect(sx - halfW, sy - halfH, 96 * ds, 96 * ds);
 
-    const circBtn = this.createToggleButton(controlX + 170, y - 2, 'CIRCLE', () => {
-      this.config.type = 'circle';
-      this.updateTypeToggle();
-      this.updateControlVisibility();
-      this.redrawOverlay();
-    });
+    const topLeftX = sx - halfW;
+    const topLeftY = sy - halfH;
 
-    this.rectControls.push(rectBtn.bg); // just track for toggle highlight
-    this.circleControls.push(circBtn.bg);
+    if (this.config.type === 'rectangle') {
+      const w = this.config.width * s * ds;
+      const h = this.config.height * s * ds;
+      const ox = this.config.offsetX * ds;
+      const oy = this.config.offsetY * ds;
 
-    y += 30;
+      this.overlay.lineStyle(2, 0x19c37d, 1);
+      this.overlay.fillStyle(0x19c37d, 0.18);
+      this.overlay.fillRect(topLeftX + ox, topLeftY + oy, w, h);
+      this.overlay.strokeRect(topLeftX + ox, topLeftY + oy, w, h);
+    } else {
+      const r = this.config.radius * s * ds;
+      const ox = this.config.circleOffsetX * ds;
+      const oy = this.config.circleOffsetY * ds;
+      const cx = topLeftX + ox + r;
+      const cy = topLeftY + oy + r;
 
-    // ---- Rectangle controls ----
-    const rectGroup: Phaser.GameObjects.GameObject[] = [];
-
-    rectGroup.push(...this.createParamRow(controlX, y, 'Width', 'width', 1, 1, 96));
-    y += 26;
-    rectGroup.push(...this.createParamRow(controlX, y, 'Height', 'height', 1, 1, 96));
-    y += 26;
-    rectGroup.push(...this.createParamRow(controlX, y, 'Offset X', 'offsetX', 1, 0, 96));
-    y += 26;
-    rectGroup.push(...this.createParamRow(controlX, y, 'Offset Y', 'offsetY', 1, 0, 96));
-    y += 26;
-
-    this.rectControls.push(...rectGroup);
-
-    // ---- Circle controls ----
-    const circGroup: Phaser.GameObjects.GameObject[] = [];
-    const circY = controlY + 30;
-
-    circGroup.push(...this.createParamRow(controlX, circY, 'Radius', 'radius', 1, 1, 48));
-    circGroup.push(...this.createParamRow(controlX, circY + 26, 'Offset X', 'circleOffsetX', 1, 0, 96));
-    circGroup.push(...this.createParamRow(controlX, circY + 52, 'Offset Y', 'circleOffsetY', 1, 0, 96));
-
-    this.circleControls.push(...circGroup);
-
-    // ---- Scale (always visible) ----
-    const scaleY = controlY + 30 + 26 * 4;
-    this.createParamRow(controlX, scaleY, 'Scale', 'scale', 0.1, 0.1, 4, 1);
-
-    // ---- Playback controls ----
-    const playY = scaleY + 36;
-    this.playPauseText = this.add.text(controlX, playY, '[ PAUSE ]', {
-      fontSize: '12px', color: '#7fdbca',
-    }).setDepth(100).setInteractive({ useHandCursor: true });
-    this.playPauseText.on('pointerdown', () => this.togglePlayPause());
-
-    this.add.text(controlX + 80, playY, '[ < ]', {
-      fontSize: '12px', color: '#7fdbca',
-    }).setDepth(100).setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.stepFrame(-1));
-
-    this.add.text(controlX + 110, playY, '[ > ]', {
-      fontSize: '12px', color: '#7fdbca',
-    }).setDepth(100).setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.stepFrame(1));
-
-    this.frameText = this.add.text(controlX + 150, playY, 'Frame: 0 / 0', {
-      fontSize: '12px', color: '#829ab1',
-    }).setDepth(100);
-
-    // Initial visibility
-    this.updateTypeToggle();
-    this.updateControlVisibility();
-  }
-
-  private createToggleButton(
-    x: number, y: number, label: string, onClick: () => void
-  ): { bg: Phaser.GameObjects.Rectangle; text: Phaser.GameObjects.Text } {
-    const bg = this.add.rectangle(x, y, 50, 22, 0x243b53, 1)
-      .setOrigin(0, 0)
-      .setDepth(100)
-      .setStrokeStyle(1, 0x486581, 1)
-      .setInteractive({ useHandCursor: true });
-    bg.on('pointerdown', onClick);
-
-    const text = this.add.text(x + 25, y + 11, label, {
-      fontSize: '11px', color: '#f0f4f8',
-    }).setOrigin(0.5).setDepth(101);
-
-    bg.setData('toggleLabel', label);
-    return { bg, text };
-  }
-
-  private updateTypeToggle(): void {
-    // Highlight active type button
-    this.rectControls.forEach((obj) => {
-      if (obj instanceof Phaser.GameObjects.Rectangle && obj.getData('toggleLabel') === 'RECT') {
-        obj.setFillStyle(this.config.type === 'rectangle' ? 0xe85d04 : 0x243b53, 1);
-      }
-    });
-    this.circleControls.forEach((obj) => {
-      if (obj instanceof Phaser.GameObjects.Rectangle && obj.getData('toggleLabel') === 'CIRCLE') {
-        obj.setFillStyle(this.config.type === 'circle' ? 0xe85d04 : 0x243b53, 1);
-      }
-    });
-  }
-
-  private updateControlVisibility(): void {
-    const isRect = this.config.type === 'rectangle';
-    this.rectControls.forEach((obj) => {
-      if (obj instanceof Phaser.GameObjects.Rectangle && obj.getData('toggleLabel')) return;
-      if ('setVisible' in obj) (obj as { setVisible(v: boolean): void }).setVisible(isRect);
-    });
-    this.circleControls.forEach((obj) => {
-      if (obj instanceof Phaser.GameObjects.Rectangle && obj.getData('toggleLabel')) return;
-      if ('setVisible' in obj) (obj as { setVisible(v: boolean): void }).setVisible(!isRect);
-    });
-  }
-
-  private createParamRow(
-    x: number, y: number, label: string, configKey: keyof ColliderConfig,
-    step: number, min: number, max: number, decimals = 0
-  ): Phaser.GameObjects.GameObject[] {
-    const objects: Phaser.GameObjects.GameObject[] = [];
-
-    const labelText = this.add.text(x, y + 2, label, {
-      fontSize: '12px', color: '#bcccdc',
-    }).setDepth(100);
-    objects.push(labelText);
-
-    const valueText = this.add.text(x + 100, y + 2, '', {
-      fontSize: '12px', color: '#f0f4f8',
-    }).setDepth(100);
-    objects.push(valueText);
-    this.valueTexts.set(configKey, valueText);
-    this.updateValueText(configKey, decimals);
-
-    const minusBtn = this.add.rectangle(x + 150, y, 24, 20, 0x243b53, 1)
-      .setOrigin(0, 0).setDepth(100)
-      .setStrokeStyle(1, 0x486581, 1)
-      .setInteractive({ useHandCursor: true });
-    minusBtn.on('pointerdown', () => {
-      const val = Math.max(min, (this.config[configKey] as number) - step);
-      (this.config as unknown as Record<string, number>)[configKey] = Math.round(val * 100) / 100;
-      this.updateValueText(configKey, decimals);
-      this.redrawOverlay();
-    });
-    objects.push(minusBtn);
-
-    const minusLabel = this.add.text(x + 162, y + 10, '-', {
-      fontSize: '14px', color: '#f0f4f8',
-    }).setOrigin(0.5).setDepth(101);
-    objects.push(minusLabel);
-
-    const plusBtn = this.add.rectangle(x + 180, y, 24, 20, 0x243b53, 1)
-      .setOrigin(0, 0).setDepth(100)
-      .setStrokeStyle(1, 0x486581, 1)
-      .setInteractive({ useHandCursor: true });
-    plusBtn.on('pointerdown', () => {
-      const val = Math.min(max, (this.config[configKey] as number) + step);
-      (this.config as unknown as Record<string, number>)[configKey] = Math.round(val * 100) / 100;
-      this.updateValueText(configKey, decimals);
-      this.redrawOverlay();
-    });
-    objects.push(plusBtn);
-
-    const plusLabel = this.add.text(x + 192, y + 10, '+', {
-      fontSize: '14px', color: '#f0f4f8',
-    }).setOrigin(0.5).setDepth(101);
-    objects.push(plusLabel);
-
-    return objects;
-  }
-
-  private updateValueText(configKey: keyof ColliderConfig, decimals = 0): void {
-    const text = this.valueTexts.get(configKey);
-    if (text) {
-      const val = this.config[configKey] as number;
-      text.setText(decimals > 0 ? val.toFixed(decimals) : String(val));
+      this.overlay.lineStyle(2, 0x19c37d, 1);
+      this.overlay.fillStyle(0x19c37d, 0.18);
+      this.overlay.fillCircle(cx, cy, r);
+      this.overlay.strokeCircle(cx, cy, r);
     }
+
+    // Crosshair at sprite center
+    this.overlay.lineStyle(1, 0xe85d04, 0.4);
+    this.overlay.lineBetween(sx - 12, sy, sx + 12, sy);
+    this.overlay.lineBetween(sx, sy - 12, sx, sy + 12);
   }
 
-  private createActionButtons(): void {
-    const cam = this.cameras.main;
-    const btnY = cam.height - 40;
-    const btnX = this.panelWidth + 20;
-
-    this.createActionButton(btnX, btnY, 'APPLY & EXIT', 120, () => this.applyAndExit(), 0x22543d);
-    this.createActionButton(btnX + 130, btnY, 'RESET', 80, () => this.resetConfig(), 0x742a2a);
-    this.createActionButton(btnX + 220, btnY, 'CANCEL', 80, () => this.cancel(), 0x243b53);
-  }
-
-  private createActionButton(
-    x: number, y: number, label: string, width: number,
-    onClick: () => void, color: number
-  ): void {
-    const btn = this.add.rectangle(x, y, width, 28, color, 1)
-      .setOrigin(0, 0).setDepth(100)
-      .setStrokeStyle(1, 0x486581, 1)
-      .setInteractive({ useHandCursor: true });
-    btn.on('pointerdown', onClick);
-
-    this.add.text(x + width / 2, y + 14, label, {
-      fontSize: '12px', color: '#f0f4f8',
-    }).setOrigin(0.5).setDepth(101);
-  }
+  /* ------------------------------------------------------------------ */
+  /*  Interaction                                                        */
+  /* ------------------------------------------------------------------ */
 
   private registerInput(): void {
     this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC).on('down', () => {
@@ -448,7 +510,7 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.currentSheet = entry;
     this.currentFrame = 0;
     this.isPlaying = true;
-    this.playPauseText.setText('[ PAUSE ]');
+    this.playPauseBtn.textContent = 'PAUSE';
 
     if (entry.animKey) {
       this.spritePreview.play(entry.animKey);
@@ -456,38 +518,29 @@ export class SpriteEditorScene extends Phaser.Scene {
       this.spritePreview.stop();
       this.spritePreview.setTexture(entry.textureKey, 0);
       this.isPlaying = false;
-      this.playPauseText.setText('[ PLAY ]');
+      this.playPauseBtn.textContent = 'PLAY';
     }
 
-    this.frameText.setText(`Frame: 0 / ${entry.frameCount - 1}`);
+    this.frameEl.textContent = `Frame 0 / ${entry.frameCount - 1}`;
     this.updateAnimListHighlight();
   }
 
-  private updateAnimListHighlight(): void {
-    this.animListItems.forEach(({ bg, entry }) => {
-      bg.setFillStyle(entry.key === this.currentSheet.key ? 0xe85d04 : 0x1b2530, 1);
-    });
-  }
-
   private togglePlayPause(): void {
-    if (!this.currentSheet.animKey) {
-      // No registered animation, just scrub frames
-      return;
-    }
+    if (!this.currentSheet.animKey) return;
 
     this.isPlaying = !this.isPlaying;
     if (this.isPlaying) {
       this.spritePreview.play(this.currentSheet.animKey!);
-      this.playPauseText.setText('[ PAUSE ]');
+      this.playPauseBtn.textContent = 'PAUSE';
     } else {
       this.spritePreview.anims.pause();
-      this.playPauseText.setText('[ PLAY ]');
+      this.playPauseBtn.textContent = 'PLAY';
     }
   }
 
   private stepFrame(dir: number): void {
     this.isPlaying = false;
-    this.playPauseText.setText('[ PLAY ]');
+    this.playPauseBtn.textContent = 'PLAY';
 
     if (this.currentSheet.animKey && this.spritePreview.anims.isPlaying) {
       this.spritePreview.anims.pause();
@@ -497,57 +550,12 @@ export class SpriteEditorScene extends Phaser.Scene {
       this.currentFrame + dir, 0, this.currentSheet.frameCount
     );
     this.spritePreview.setTexture(this.currentSheet.textureKey, this.currentFrame);
-    this.frameText.setText(`Frame: ${this.currentFrame} / ${this.currentSheet.frameCount - 1}`);
+    this.frameEl.textContent = `Frame ${this.currentFrame} / ${this.currentSheet.frameCount - 1}`;
   }
 
-  private redrawOverlay(): void {
-    this.overlay.clear();
-    this.boundsOutline.clear();
-
-    const s = this.config.scale;
-    const ds = this.displayScale;
-    const sx = this.spritePreview.x;
-    const sy = this.spritePreview.y;
-
-    // Sprite frame bounds (96x96 at displayScale)
-    const halfW = (96 * ds) / 2;
-    const halfH = (96 * ds) / 2;
-    this.boundsOutline.lineStyle(1, 0x486581, 0.5);
-    this.boundsOutline.strokeRect(sx - halfW, sy - halfH, 96 * ds, 96 * ds);
-
-    // Collider overlay
-    const topLeftX = sx - halfW;
-    const topLeftY = sy - halfH;
-
-    if (this.config.type === 'rectangle') {
-      const w = this.config.width * s * ds;
-      const h = this.config.height * s * ds;
-      const ox = this.config.offsetX * ds;
-      const oy = this.config.offsetY * ds;
-
-      this.overlay.lineStyle(2, 0x19c37d, 1);
-      this.overlay.fillStyle(0x19c37d, 0.18);
-      this.overlay.fillRect(topLeftX + ox, topLeftY + oy, w, h);
-      this.overlay.strokeRect(topLeftX + ox, topLeftY + oy, w, h);
-    } else {
-      const r = this.config.radius * s * ds;
-      const ox = this.config.circleOffsetX * ds;
-      const oy = this.config.circleOffsetY * ds;
-      // Circle offset in Phaser is from top-left, center = offset + radius
-      const cx = topLeftX + ox + r;
-      const cy = topLeftY + oy + r;
-
-      this.overlay.lineStyle(2, 0x19c37d, 1);
-      this.overlay.fillStyle(0x19c37d, 0.18);
-      this.overlay.fillCircle(cx, cy, r);
-      this.overlay.strokeCircle(cx, cy, r);
-    }
-
-    // Crosshair at sprite center
-    this.overlay.lineStyle(1, 0xe85d04, 0.4);
-    this.overlay.lineBetween(sx - 12, sy, sx + 12, sy);
-    this.overlay.lineBetween(sx, sy - 12, sx, sy + 12);
-  }
+  /* ------------------------------------------------------------------ */
+  /*  Actions                                                            */
+  /* ------------------------------------------------------------------ */
 
   private applyAndExit(): void {
     setColliderConfig(this.config);
@@ -558,10 +566,9 @@ export class SpriteEditorScene extends Phaser.Scene {
   private resetConfig(): void {
     resetColliderConfig();
     this.config = getColliderConfig();
-    // Update all value displays
-    this.valueTexts.forEach((_text, key) => {
+    this.valueEls.forEach((_el, key) => {
       const decimals = key === 'scale' ? 1 : 0;
-      this.updateValueText(key as keyof ColliderConfig, decimals);
+      this.updateValueDisplay(key as keyof ColliderConfig, decimals);
     });
     this.updateTypeToggle();
     this.updateControlVisibility();
