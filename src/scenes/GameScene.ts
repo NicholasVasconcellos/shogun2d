@@ -53,7 +53,12 @@ export class GameScene extends Phaser.Scene {
     // Dev panel
     if (this.devMode) {
       this.devPanel = new DevPanel(this.player, () => {
-        this.scene.start('LevelBuilder');
+        this.scene.start('LevelBuilder', {
+          playerX: this.player.sprite.x,
+          playerY: this.player.sprite.y,
+          playerFlipX: this.player.sprite.flipX,
+          playerAnim: this.player.sprite.anims.currentAnim?.key
+        });
       }, () => {
         this.scene.start('SpriteEditor');
       }, {
@@ -77,7 +82,12 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.input.keyboard?.addKey('F3').on('down', () => {
-      this.scene.start('LevelBuilder');
+      this.scene.start('LevelBuilder', {
+        playerX: this.player.sprite.x,
+        playerY: this.player.sprite.y,
+        playerFlipX: this.player.sprite.flipX,
+        playerAnim: this.player.sprite.anims.currentAnim?.key
+      });
     });
 
     this.input.keyboard?.addKey('F4').on('down', () => {
